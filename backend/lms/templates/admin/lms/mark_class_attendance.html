@@ -1,0 +1,534 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Mark Class Attendance | Admin{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* ── Page layout ── */
+    .att-wrap {
+        max-width: 900px;
+        margin: 24px auto;
+        font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    .att-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 28px 32px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
+    }
+
+    /* ── Filter bar ── */
+    .att-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: flex-end;
+        margin-bottom: 28px;
+    }
+
+    .att-filters label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        margin-bottom: 5px;
+    }
+
+    .att-filters select,
+    .att-filters input {
+        padding: 9px 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+        min-width: 200px;
+    }
+
+    .att-filters select:focus,
+    .att-filters input:focus {
+        outline: none;
+        border-color: #417690;
+        box-shadow: 0 0 0 3px rgba(65, 118, 144, .2);
+    }
+
+    .att-filters button {
+        padding: 9px 22px;
+        background: #417690;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .att-filters button:hover {
+        background: #205070;
+    }
+
+    /* ── Stats row ── */
+    .att-stats {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .att-stat {
+        flex: 1;
+        min-width: 120px;
+        padding: 14px 18px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .att-stat-total {
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+    }
+
+    .att-stat-p {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+    }
+
+    .att-stat-a {
+        background: #fef2f2;
+        border: 1px solid #fca5a5;
+    }
+
+    .att-stat-num {
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .att-stat-lbl {
+        font-size: 11px;
+        font-weight: 700;
+        color: #555;
+        text-transform: uppercase;
+        margin-top: 4px;
+    }
+
+    /* ── Quick-select buttons ── */
+    .att-quick {
+        margin-bottom: 14px;
+        display: flex;
+        gap: 8px;
+    }
+
+    .att-quick button {
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        border: 1px solid;
+    }
+
+    .btn-all-p {
+        background: #f0fdf4;
+        border-color: #86efac;
+        color: #166534;
+    }
+
+    .btn-all-p:hover {
+        background: #dcfce7;
+    }
+
+    .btn-all-a {
+        background: #fef2f2;
+        border-color: #fca5a5;
+        color: #991b1b;
+    }
+
+    .btn-all-a:hover {
+        background: #fee2e2;
+    }
+
+    /* ── Table ── */
+    .att-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .att-table th {
+        background: #f5f7fa;
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #555;
+        letter-spacing: .06em;
+        border-bottom: 2px solid #ddd;
+    }
+
+    .att-table td {
+        padding: 11px 14px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 14px;
+        vertical-align: middle;
+    }
+
+    .att-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .att-table tr:hover td {
+        background: #f9fafb;
+    }
+
+    /* ── Radio toggle ── */
+    .toggle-group {
+        display: flex;
+        gap: 6px;
+    }
+
+    .toggle-group label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 700;
+        border: 2px solid;
+        transition: all .1s;
+        user-select: none;
+    }
+
+    .toggle-p {
+        border-color: #d1fae5;
+        color: #065f46;
+        background: #f0fdf4;
+    }
+
+    .toggle-p input:checked~span,
+    .toggle-label-p.active {
+        background: #10b981;
+    }
+
+    .radio-p:checked+.toggle-p {
+        background: #10b981;
+        border-color: #10b981;
+        color: #fff;
+    }
+
+    .radio-a:checked+.toggle-a {
+        background: #ef4444;
+        border-color: #ef4444;
+        color: #fff;
+    }
+
+    .toggle-a {
+        border-color: #fee2e2;
+        color: #991b1b;
+        background: #fef2f2;
+    }
+
+    /* ── Save bar ── */
+    .att-save-bar {
+        margin-top: 22px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding-top: 18px;
+        border-top: 1px solid #eee;
+    }
+
+    .btn-save {
+        padding: 11px 32px;
+        background: #10b981;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: background .15s;
+    }
+
+    .btn-save:hover {
+        background: #059669;
+    }
+
+    .btn-back {
+        padding: 11px 20px;
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #333;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .btn-back:hover {
+        background: #eee;
+    }
+
+    .att-count-note {
+        font-size: 13px;
+        color: #888;
+    }
+
+    /* ── Tags ── */
+    .tag-course {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 9999px;
+        font-size: 11px;
+        font-weight: 700;
+        background: #dbeafe;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+    }
+
+    .tag-p {
+        color: #065f46;
+        background: #d1fae5;
+        border: 1px solid #a7f3d0;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .tag-a {
+        color: #991b1b;
+        background: #fee2e2;
+        border: 1px solid #fca5a5;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .empty-msg {
+        text-align: center;
+        padding: 48px 20px;
+        color: #999;
+        font-size: 15px;
+    }
+
+    .empty-msg .icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="att-wrap">
+
+    {# ── Page header ── #}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div>
+            <h1 style="margin:0;font-size:22px;font-weight:800;color:#1a202c;">📋 Mark Class Attendance</h1>
+            <p style="margin:4px 0 0;color:#6b7280;font-size:13px;">Select a course and date, then mark each student's
+                attendance in one click.</p>
+        </div>
+        <a href="../" class="btn-back">← Back to Logs</a>
+    </div>
+
+    {# ── Messages ── #}
+    {% if messages %}
+    {% for msg in messages %}
+    <div
+        style="margin-bottom:16px;padding:12px 18px;border-radius:8px;background:{% if msg.tags == 'success' %}#f0fdf4{% else %}#fef2f2{% endif %};border: 1px solid {% if msg.tags == 'success' %}#86efac{% else %}#fca5a5{% endif %};color:{% if msg.tags == 'success' %}#166534{% else %}#991b1b{% endif %};font-weight:600;">
+        {{ msg }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="att-card">
+
+        {# ── FILTER FORM (GET) ── #}
+        <form method="get" action=".">
+            <div class="att-filters">
+                <div>
+                    <label for="id_course">Course</label>
+                    <select name="course_id" id="id_course">
+                        <option value="">— Pick a course —</option>
+                        {% for c in courses %}
+                        <option value="{{ c.id }}" {% if selected_course_id==c.id|stringformat:"s" %}selected{% endif
+                            %}>{{ c.course_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_date">Date</label>
+                    <input type="date" name="date" id="id_date" value="{{ selected_date }}" max="{{ today }}">
+                </div>
+                <button type="submit">Load Students ▸</button>
+            </div>
+        </form>
+
+        {# ── STUDENT TABLE ── #}
+        {% if enrollments %}
+
+        {# -- Stats bar -- #}
+        {% with total=enrollments|length %}
+        <div class="att-stats">
+            <div class="att-stat att-stat-total">
+                <div class="att-stat-num" style="color:#4338ca;">{{ total }}</div>
+                <div class="att-stat-lbl">Enrolled</div>
+            </div>
+            <div class="att-stat att-stat-p">
+                <div class="att-stat-num" style="color:#16a34a;" id="present-count">0</div>
+                <div class="att-stat-lbl">Present</div>
+            </div>
+            <div class="att-stat att-stat-a">
+                <div class="att-stat-num" style="color:#dc2626;" id="absent-count">0</div>
+                <div class="att-stat-lbl">Absent</div>
+            </div>
+        </div>
+        {% endwith %}
+
+        {# -- Quick-select buttons -- #}
+        <div class="att-quick">
+            <button type="button" class="btn-all-p" onclick="markAll('present')">✓ Mark All Present</button>
+            <button type="button" class="btn-all-a" onclick="markAll('absent')">✗ Mark All Absent</button>
+            <span style="margin-left:auto;font-size:12px;color:#9ca3af;">
+                Existing records for <strong>{{ selected_date }}</strong> are pre-filled ↓
+            </span>
+        </div>
+
+        {# -- Attendance form (POST) -- #}
+        <form method="post" action=".?course_id={{ selected_course_id }}&date={{ selected_date }}">
+            {% csrf_token %}
+            <input type="hidden" name="course_id" value="{{ selected_course_id }}">
+            <input type="hidden" name="date" value="{{ selected_date }}">
+            <input type="hidden" name="save_attendance" value="1">
+
+            <table class="att-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Student</th>
+                        <th>Email</th>
+                        <th>Course</th>
+                        <th>Previous</th>
+                        <th style="min-width:200px;">Mark Today</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for enr in enrollments %}
+                    <tr>
+                        <td style="color:#9ca3af;font-weight:700;">{{ forloop.counter }}</td>
+                        <td>
+                            <div style="font-weight:700;color:#1a202c;">{{ enr.student.username }}</div>
+                        </td>
+                        <td style="color:#6b7280;font-size:13px;">{{ enr.student.email }}</td>
+                        <td><span class="tag-course">{{ enr.course.course_name }}</span></td>
+                        <td>
+                            {% if enr.current_status == "present" %}
+                            <span class="tag-p">● Present</span>
+                            {% elif enr.current_status == "absent" %}
+                            <span class="tag-a">● Absent</span>
+                            {% else %}
+                            <span style="color:#9ca3af;font-size:12px;">Not recorded</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="toggle-group" data-enr="{{ enr.id }}">
+                                <input type="radio" name="status_{{ enr.id }}" id="p_{{ enr.id }}" value="present"
+                                    class="radio-p" style="display:none;" {% if enr.current_status=="present" or
+                                    enr.current_status=="" %}checked{% endif %}>
+                                <label for="p_{{ enr.id }}" class="toggle-p" id="lbl_p_{{ enr.id }}">
+                                    ✓ Present
+                                </label>
+
+                                <input type="radio" name="status_{{ enr.id }}" id="a_{{ enr.id }}" value="absent"
+                                    class="radio-a" style="display:none;" {% if enr.current_status=="absent" %}checked{%
+                                    endif %}>
+                                <label for="a_{{ enr.id }}" class="toggle-a" id="lbl_a_{{ enr.id }}">
+                                    ✗ Absent
+                                </label>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                </tbody>
+            </table>
+
+            <div class="att-save-bar">
+                <button type="submit" class="btn-save">💾 Save All Attendance</button>
+                <a href="../" class="btn-back">Cancel</a>
+                <span class="att-count-note" id="summary-note"></span>
+            </div>
+        </form>
+
+        {% elif selected_course_id %}
+        <div class="empty-msg">
+            <div class="icon">🎓</div>
+            <p>No students enrolled in this course yet.</p>
+        </div>
+        {% else %}
+        <div class="empty-msg">
+            <div class="icon">👆</div>
+            <p>Select a course and date above to load the attendance sheet.</p>
+        </div>
+        {% endif %}
+
+    </div>{# /.att-card #}
+</div>{# /.att-wrap #}
+
+<script>
+    // Highlight active radio labels and update counters
+    function updateUI() {
+        var rows = document.querySelectorAll('.toggle-group');
+        var present = 0, absent = 0;
+        rows.forEach(function (group) {
+            var enrId = group.dataset.enr;
+            var radioP = document.getElementById('p_' + enrId);
+            var radioA = document.getElementById('a_' + enrId);
+            var lblP = document.getElementById('lbl_p_' + enrId);
+            var lblA = document.getElementById('lbl_a_' + enrId);
+            if (radioP && radioP.checked) {
+                lblP.style.background = '#10b981'; lblP.style.borderColor = '#10b981'; lblP.style.color = '#fff';
+                lblA.style.background = '#fef2f2'; lblA.style.borderColor = '#fee2e2'; lblA.style.color = '#991b1b';
+                present++;
+            } else if (radioA && radioA.checked) {
+                lblA.style.background = '#ef4444'; lblA.style.borderColor = '#ef4444'; lblA.style.color = '#fff';
+                lblP.style.background = '#f0fdf4'; lblP.style.borderColor = '#d1fae5'; lblP.style.color = '#065f46';
+                absent++;
+            }
+        });
+        var pc = document.getElementById('present-count');
+        var ac = document.getElementById('absent-count');
+        var sn = document.getElementById('summary-note');
+        if (pc) pc.textContent = present;
+        if (ac) ac.textContent = absent;
+        if (sn) sn.textContent = present + ' present · ' + absent + ' absent · ' + (present + absent) + ' total marked';
+    }
+
+    function markAll(status) {
+        document.querySelectorAll('.toggle-group').forEach(function (group) {
+            var enrId = group.dataset.enr;
+            var radio = document.getElementById((status === 'present' ? 'p_' : 'a_') + enrId);
+            if (radio) radio.checked = true;
+        });
+        updateUI();
+    }
+
+    // Listen to all radio changes
+    document.addEventListener('change', function (e) {
+        if (e.target.classList.contains('radio-p') || e.target.classList.contains('radio-a')) {
+            updateUI();
+        }
+    });
+
+    // Init on load
+    document.addEventListener('DOMContentLoaded', updateUI);
+</script>
+{% endblock %}
