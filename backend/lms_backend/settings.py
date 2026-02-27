@@ -56,10 +56,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG # Only allow all in dev
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in dev
 
 if not DEBUG:
-    CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+    _cors_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
+    CORS_ALLOWED_ORIGINS = (
+        _cors_env.split(',')
+        if _cors_env
+        else ['https://vetriacademy-myih.vercel.app']
+    )
 
 AUTH_USER_MODEL = 'accounts.User'
 
