@@ -13,3 +13,5 @@ __pycache__/
 frontend/.react-router/
 frontend/build/
 frontend/node_modules/
+# Root-level requirements (local pip freeze, not for deployment)
+/requirements.txt
