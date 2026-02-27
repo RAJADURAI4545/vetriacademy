@@ -1,6 +1,6 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
+import { API_BASE_URL } from "../config";
 import { useNavigate } from "react-router";
 import { useToast } from "../context/NotificationContext";
 
@@ -52,15 +52,14 @@ export default function AdminDashboard() {
     const [marking, setMarking] = useState(false);
 
     const fetchData = async () => {
-        const token = localStorage.getItem("access_token");
         try {
             const url = selectedCourseId === "all"
-                ? "http://localhost:8000/api/lms/all-students/"
-                : `http://localhost:8000/api/lms/all-students/?course_id=${selectedCourseId}`;
+                ? "/api/lms/all-students/"
+                : `/api/lms/all-students/?course_id=${selectedCourseId}`;
 
             const [enrollRes, courseRes] = await Promise.all([
-                axios.get(url, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get("http://localhost:8000/api/lms/courses/", { headers: { Authorization: `Bearer ${token}` } })
+                api.get(url),
+                api.get("/api/lms/courses/")
             ]);
 
             setEnrollments(enrollRes.data);
@@ -84,14 +83,13 @@ export default function AdminDashboard() {
 
     const handleMarkAttendance = async () => {
         if (!selectedEnrollment) return;
-        const token = localStorage.getItem("access_token");
         setMarking(true);
         try {
-            await axios.post("http://localhost:8000/api/lms/attendance/mark/", {
+            await api.post("/api/lms/attendance/mark/", {
                 enrollment_id: selectedEnrollment.id,
                 date: markDate,
                 status: markStatus
-            }, { headers: { Authorization: `Bearer ${token}` } });
+            });
 
             showToast(`Attendance marked as ${markStatus} for ${selectedEnrollment.student.username}`, "success");
             setShowMarkModal(false);
@@ -218,7 +216,7 @@ export default function AdminDashboard() {
                                                 Mark Attendance
                                             </button>
                                             <a
-                                                href={`http://localhost:8000/admin/lms/enrollment/${enr.id}/change/`}
+                                                href={`${API_BASE_URL}/admin/lms/enrollment/${enr.id}/change/`}
                                                 target="_blank"
                                                 className="text-sm font-bold text-gray-400 hover:text-gray-600 hover:underline"
                                             >

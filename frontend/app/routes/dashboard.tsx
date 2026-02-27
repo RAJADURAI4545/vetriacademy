@@ -1,6 +1,6 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
+import { API_BASE_URL } from "../config";
 import { useNavigate } from "react-router";
 import { useToast } from "../context/NotificationContext";
 import { useTranslation } from "react-i18next";
@@ -145,7 +145,7 @@ export default function Dashboard() {
         if (!path) return "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop";
         if (path.startsWith('http')) return path;
         const cleanPath = path.startsWith('/') ? path : `/${path}`;
-        return `http://localhost:8000${cleanPath}`;
+        return `${API_BASE_URL}${cleanPath}`;
     };
 
     const getAttendanceColor = (pct: number) => {
@@ -200,8 +200,8 @@ export default function Dashboard() {
         if (!token) { navigate("/login"); return; }
         try {
             const [dashRes, courseRes] = await Promise.all([
-                axios.get("http://localhost:8000/api/lms/dashboard/", { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get("http://localhost:8000/api/lms/courses/")
+                api.get("/api/lms/dashboard/"),
+                api.get("/api/lms/courses/")
             ]);
             setData(dashRes.data);
             setAllCourses(courseRes.data);
@@ -214,9 +214,7 @@ export default function Dashboard() {
         if (!token) return;
         setChallengesLoading(true);
         try {
-            const res = await axios.get("http://localhost:8000/api/lms/daily-challenges/", {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get("/api/lms/daily-challenges/");
             setChallenges(res.data);
         } catch (err) { console.error(err); }
         finally { setChallengesLoading(false); }
@@ -225,9 +223,7 @@ export default function Dashboard() {
     const fetchMyLogs = async () => {
         setLogsLoading(true);
         try {
-            const resp = await axios.get(`http://localhost:8000/api/lms/attendance/logs/`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
-            });
+            const resp = await api.get(`/api/lms/attendance/logs/`);
             setAttendanceLogs(resp.data);
         } catch (err) {
             showToast("Failed to load attendance logs", "error");
@@ -250,10 +246,10 @@ export default function Dashboard() {
         formData.append("profile_picture", file);
         setUploading(true);
         try {
-            await axios.patch("http://localhost:8000/api/accounts/profile/", formData, {
-                headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+            await api.patch("/api/accounts/profile/", formData, {
+                headers: { "Content-Type": "multipart/form-data" },
             });
-            const res = await axios.get("http://localhost:8000/api/lms/dashboard/", { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get("/api/lms/dashboard/");
             setData(res.data);
         } catch (error) { handleError(error, "Failed to update profile picture."); }
         finally { setUploading(false); }
@@ -264,9 +260,9 @@ export default function Dashboard() {
         // For now using native confirm as it's less intrusive than alert, but will replace if needed.
         if (!window.confirm(`Enroll in "${courseName}"?`)) return;
         try {
-            const res = await axios.post("http://localhost:8000/api/lms/enroll/", { course_id: courseId }, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.post("/api/lms/enroll/", { course_id: courseId });
             showToast(res.data.detail || `Successfully enrolled in ${courseName}!`, "success");
-            const dashRes = await axios.get("http://localhost:8000/api/lms/dashboard/", { headers: { Authorization: `Bearer ${token}` } });
+            const dashRes = await api.get("/api/lms/dashboard/");
             setData(dashRes.data);
             setActiveTab("courses");
             fetchChallenges(); // Refresh challenges after enrollment
@@ -283,11 +279,9 @@ export default function Dashboard() {
             // For quiz, we send a JSON object with responses
             try {
                 setIsSubmittingChallenge(true);
-                const res = await axios.post("http://localhost:8000/api/lms/daily-challenges/submit/", {
+                const res = await api.post("/api/lms/daily-challenges/submit/", {
                     challenge_id: activeSubmissionId,
                     responses: quizResponses
-                }, {
-                    headers: { Authorization: `Bearer ${token}` }
                 });
                 showToast(res.data.detail || "Quiz submitted successfully!", "success");
                 setActiveSubmissionId(null);
@@ -310,8 +304,8 @@ export default function Dashboard() {
 
         setIsSubmittingChallenge(true);
         try {
-            await axios.post("http://localhost:8000/api/lms/daily-challenges/submit/", formData, {
-                headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" }
+            await api.post("/api/lms/daily-challenges/submit/", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
             });
             showToast("Challenge submitted successfully!", "success");
             setActiveSubmissionId(null);
@@ -353,9 +347,7 @@ export default function Dashboard() {
     const handleLogCourseChange = async (studentId: number) => {
         setLogsLoading(true);
         try {
-            const resp = await axios.get(`http://localhost:8000/api/lms/attendance/logs/${studentId}/`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
-            });
+            const resp = await api.get(`/api/lms/attendance/logs/${studentId}/`);
             setAttendanceLogs(resp.data);
         } catch (err) {
             showToast("Failed to load attendance logs", "error");
@@ -368,7 +360,7 @@ export default function Dashboard() {
         const token = localStorage.getItem("access_token");
         setLogsLoading(true);
         try {
-            const res = await axios.get(`http://localhost:8000/api/lms/attendance/logs/${enrollmentId}/`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get(`/api/lms/attendance/logs/${enrollmentId}/`);
             setAttendanceLogs(res.data);
         } catch (err) { handleError(err); }
         finally { setLogsLoading(false); }
@@ -377,8 +369,7 @@ export default function Dashboard() {
     const handleDownloadCSV = async (enrollmentId: number, courseName: string) => {
         const token = localStorage.getItem("access_token");
         try {
-            const response = await axios.get(`http://localhost:8000/api/lms/attendance/export/${enrollmentId}/`, {
-                headers: { Authorization: `Bearer ${token}` },
+            const response = await api.get(`/api/lms/attendance/export/${enrollmentId}/`, {
                 responseType: 'blob'
             });
             const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -396,15 +387,15 @@ export default function Dashboard() {
         const token = localStorage.getItem("access_token");
         setMarking(true);
         try {
-            await axios.post("http://localhost:8000/api/lms/attendance/mark/", {
+            await api.post("/api/lms/attendance/mark/", {
                 enrollment_id: logEnrollmentId,
                 date: markDate,
                 status: markStatus
-            }, { headers: { Authorization: `Bearer ${token}` } });
+            });
 
             // Refresh logs and dashboard data
             fetchLogs(logEnrollmentId);
-            const res = await axios.get("http://localhost:8000/api/lms/dashboard/", { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get("/api/lms/dashboard/");
             setData(res.data);
             showToast("Attendance marked successfully.", "success");
         } catch (err) { handleError(err, "Failed to mark attendance."); }

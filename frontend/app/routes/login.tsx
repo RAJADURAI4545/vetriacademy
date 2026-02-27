@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router";
-import axios from "axios";
+import api from "../api";
+import { API_BASE_URL } from "../config";
 
 export function meta() {
     return [{ title: "Sign In | Vetri Academy" }];
@@ -30,7 +31,7 @@ export default function Login() {
         setLoading(true);
         setError("");
         try {
-            const resp = await axios.post("http://localhost:8000/api/accounts/login/", { email, password });
+            const resp = await api.post("/api/accounts/login/", { email, password });
             localStorage.setItem("access_token", resp.data.access);
             localStorage.setItem("refresh_token", resp.data.refresh);
 

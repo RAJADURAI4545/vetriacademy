@@ -1,6 +1,5 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router";
 import { useToast } from "../context/NotificationContext";
 import { useTranslation } from "react-i18next";
@@ -106,13 +105,9 @@ export default function TeacherDashboard() {
     });
     const [isSavingMission, setIsSavingMission] = useState(false);
 
-    const token = () => localStorage.getItem("access_token") || "";
-
     const fetchSummary = async () => {
         try {
-            const resp = await axios.get("http://localhost:8000/api/lms/teacher/dashboard/", {
-                headers: { Authorization: `Bearer ${token()}` }
-            });
+            const resp = await api.get("/api/lms/teacher/dashboard/");
             setSummary(resp.data);
             if (resp.data.assigned_courses.length > 0 && !selectedCourseId) {
                 setSelectedCourseId(String(resp.data.assigned_courses[0].course));
@@ -129,14 +124,11 @@ export default function TeacherDashboard() {
     const fetchStudents = async () => {
         setLoading(true);
         try {
-            let url = "http://localhost:8000/api/lms/teacher/students/";
             const params = new URLSearchParams();
             if (selectedCourseId) params.append("course_id", selectedCourseId);
             if (attendanceDate) params.append("date", attendanceDate);
 
-            const resp = await axios.get(`${url}?${params.toString()}`, {
-                headers: { Authorization: `Bearer ${token()}` }
-            });
+            const resp = await api.get(`/api/lms/teacher/students/?${params.toString()}`);
 
             // Map students and use daily_status from backend if it exists, otherwise leave undefined or default
             setStudents(resp.data.map((s: StudentRecord) => ({
@@ -157,9 +149,7 @@ export default function TeacherDashboard() {
     const fetchSubmissions = async () => {
         setSubmissionsLoading(true);
         try {
-            const resp = await axios.get("http://localhost:8000/api/lms/teacher/challenges/submissions/", {
-                headers: { Authorization: `Bearer ${token()}` }
-            });
+            const resp = await api.get("/api/lms/teacher/challenges/submissions/");
             setSubmissions(resp.data);
         } catch (err) {
             console.error(err);
@@ -172,12 +162,10 @@ export default function TeacherDashboard() {
         if (!reviewingId) return;
         setIsSubmittingFeedback(true);
         try {
-            await axios.post("http://localhost:8000/api/lms/teacher/challenges/feedback/", {
+            await api.post("/api/lms/teacher/challenges/feedback/", {
                 submission_id: reviewingId,
                 status: status,
                 feedback: feedbackText
-            }, {
-                headers: { Authorization: `Bearer ${token()}` }
             });
             showToast(`Submission ${status}`, "success");
             setReviewingId(null);
@@ -197,9 +185,7 @@ export default function TeacherDashboard() {
         }
         setIsSavingMission(true);
         try {
-            await axios.post("http://localhost:8000/api/lms/teacher/daily-challenges/create/", newMission, {
-                headers: { Authorization: `Bearer ${token()}` }
-            });
+            await api.post("/api/lms/teacher/daily-challenges/create/", newMission);
             showToast("Mission assigned successfully!", "success");
             setIsCreatingMission(false);
             setNewMission({
@@ -239,11 +225,9 @@ export default function TeacherDashboard() {
 
     const updateStudentProgress = async (enrollmentId: number, progress: number) => {
         try {
-            await axios.post("http://localhost:8000/api/lms/teacher/update-progress/", {
+            await api.post("/api/lms/teacher/update-progress/", {
                 enrollment_id: enrollmentId,
                 progress: progress
-            }, {
-                headers: { Authorization: `Bearer ${token()}` }
             });
             setStudents(prev => prev.map(s => s.id === enrollmentId ? { ...s, manual_progress: progress } : s));
             showToast("Progress updated successfully", "success");
@@ -272,11 +256,9 @@ export default function TeacherDashboard() {
                 status: s.current_status
             }));
 
-            await axios.post("http://localhost:8000/api/lms/teacher/attendance/mark/", {
+            await api.post("/api/lms/teacher/attendance/mark/", {
                 date: attendanceDate,
                 attendance: attendanceData
-            }, {
-                headers: { Authorization: `Bearer ${token()}` }
             });
 
             showToast(t("attendance_saved"), "success");

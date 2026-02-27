@@ -1,6 +1,5 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router";
 import { useToast } from "../context/NotificationContext";
 
@@ -46,18 +45,16 @@ export default function AdminAttendanceLogs() {
     const [modalCourseFilter, setModalCourseFilter] = useState<string>("all");
     const [modalStudentSearch, setModalStudentSearch] = useState<string>("");
 
-    const token = () => localStorage.getItem("access_token") || "";
-
     const fetchData = async () => {
         try {
-            let url = "http://localhost:8000/api/lms/attendance/all-logs/?";
+            let url = "/api/lms/attendance/all-logs/?";
             if (selectedCourseId !== "all") url += `course_id=${selectedCourseId}&`;
             if (selectedDate) url += `date=${selectedDate}&`;
 
             const [logsRes, coursesRes, studentsRes] = await Promise.all([
-                axios.get(url, { headers: { Authorization: `Bearer ${token()}` } }),
-                axios.get("http://localhost:8000/api/lms/courses/", { headers: { Authorization: `Bearer ${token()}` } }),
-                axios.get("http://localhost:8000/api/accounts/users/", { headers: { Authorization: `Bearer ${token()}` } }), // Need endpoint for all users
+                api.get(url),
+                api.get("/api/lms/courses/"),
+                api.get("/api/accounts/users/"), // Need endpoint for all users
             ]);
 
             setLogs(logsRes.data);
@@ -84,10 +81,9 @@ export default function AdminAttendanceLogs() {
         const newStatus = log.status === "present" ? "absent" : "present";
         setUpdatingId(log.id);
         try {
-            await axios.post(
-                "http://localhost:8000/api/lms/attendance/mark/",
-                { student_id: log.student, date: log.date, status: newStatus },
-                { headers: { Authorization: `Bearer ${token()}` } }
+            await api.post(
+                "/api/lms/attendance/mark/",
+                { student_id: log.student, date: log.date, status: newStatus }
             );
             setLogs(prev =>
                 prev.map(l => (l.id === log.id ? { ...l, status: newStatus } : l))
@@ -104,10 +100,9 @@ export default function AdminAttendanceLogs() {
         if (!markStudentId) { showToast("Please select a student.", "error"); return; }
         setMarkSaving(true);
         try {
-            await axios.post(
-                "http://localhost:8000/api/lms/attendance/mark/",
-                { student_id: Number(markStudentId), date: markDate, status: markStatus },
-                { headers: { Authorization: `Bearer ${token()}` } }
+            await api.post(
+                "/api/lms/attendance/mark/",
+                { student_id: Number(markStudentId), date: markDate, status: markStatus }
             );
             showToast("Attendance record saved.", "success");
             setShowMarkPanel(false);

@@ -1,6 +1,6 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router";
 import { useToast } from "../context/NotificationContext";
 
@@ -49,9 +49,7 @@ export default function Competitions() {
         const fetchCompetitions = async () => {
             setLoading(true);
             try {
-                const res = await axios.get(`http://localhost:8000/api/lms/competitions/?category=${activeTab}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await api.get(`/api/lms/competitions/?category=${activeTab}`);
                 setCompetitions(res.data);
             } catch (err) {
                 console.error(err);
@@ -66,11 +64,8 @@ export default function Competitions() {
     }, [navigate, activeTab]);
 
     const handleJoin = async (id: number) => {
-        const token = localStorage.getItem("access_token");
         try {
-            await axios.post(`http://localhost:8000/api/lms/competitions/join/${id}/`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await api.post(`/api/lms/competitions/join/${id}/`, {});
             setCompetitions(prev => prev.map(c => c.id === id ? { ...c, is_joined: true, participant_count: c.participant_count + 1 } : c));
             showToast("Success! You've joined the competition.", "success");
         } catch (err) {
@@ -80,13 +75,10 @@ export default function Competitions() {
     };
 
     const fetchLeaderboard = async (id: number) => {
-        const token = localStorage.getItem("access_token");
         setLoadingLeaderboard(true);
         setShowLeaderboard(id);
         try {
-            const res = await axios.get(`http://localhost:8000/api/lms/competitions/leaderboard/${id}/`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get(`/api/lms/competitions/leaderboard/${id}/`);
             setLeaderboardData(res.data);
         } catch (err) {
             console.error(err);

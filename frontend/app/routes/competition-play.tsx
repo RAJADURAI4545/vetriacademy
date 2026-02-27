@@ -1,7 +1,5 @@
-/* --- PREMIUM COMPETITION PLAY INTERFACE --- */
-import * as React from "react";
 import { useEffect, useState, useRef } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate, useParams } from "react-router";
 import { useToast } from "../context/NotificationContext";
 
@@ -37,9 +35,7 @@ export default function CompetitionPlay() {
 
         const fetchData = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/lms/competitions/questions/${id}/`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await api.get(`/api/lms/competitions/questions/${id}/`);
                 setMode(res.data.mode_type);
                 setQuestions(res.data.questions || []);
                 setMemorySets(res.data.memory_sets || []);
@@ -54,16 +50,13 @@ export default function CompetitionPlay() {
     }, [id, navigate]);
 
     const startChallenge = async () => {
-        const token = localStorage.getItem("access_token");
         try {
-            await axios.post(`http://localhost:8000/api/lms/competitions/start/${id}/`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await api.post(`/api/lms/competitions/start/${id}/`, {});
             setStarted(true);
             timerRef.current = setInterval(() => {
                 setTimeLeft(prev => {
                     if (prev <= 1) {
-                        clearInterval(timerRef.current!);
+                        if (timerRef.current) clearInterval(timerRef.current);
                         handleSubmit();
                         return 0;
                     }
@@ -107,11 +100,8 @@ export default function CompetitionPlay() {
     const handleSubmit = async () => {
         if (submitting) return;
         setSubmitting(true);
-        const token = localStorage.getItem("access_token");
         try {
-            const res = await axios.post(`http://localhost:8000/api/lms/competitions/submit/${id}/`, { answers }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.post(`/api/lms/competitions/submit/${id}/`, { answers });
             setFinalResult(res.data);
             setIsFinished(true);
             // Trigger badge reveal after delay

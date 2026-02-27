@@ -1,6 +1,6 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
 import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router";
 
 interface Badge {
@@ -40,11 +40,9 @@ export default function XPBadges() {
 
         const fetchData = async () => {
             try {
-                const res = await axios.get("http://localhost:8000/api/lms/gamification/", {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await api.get("/api/lms/gamification/");
                 setData(res.data);
-            } catch (err) {
+            } catch (err: any) {
                 console.error(err);
                 if (axios.isAxiosError(err) && err.response?.status === 401) {
                     navigate("/login");

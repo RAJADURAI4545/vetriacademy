@@ -1,6 +1,6 @@
-import * as React from "react";
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
+import { API_BASE_URL } from "../config";
 import { useNavigate, useParams } from "react-router";
 import { useToast } from "../context/NotificationContext";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -41,14 +41,10 @@ export default function TeacherStudentPerformance() {
     const [performance, setPerformance] = useState<StudentPerformanceRecord | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const token = () => localStorage.getItem("access_token") || "";
-
     useEffect(() => {
         const fetchPerformance = async () => {
             try {
-                const resp = await axios.get(`http://localhost:8000/api/lms/teacher/students/${enrollment_id}/performance/`, {
-                    headers: { Authorization: `Bearer ${token()}` }
-                });
+                const resp = await api.get(`/api/lms/teacher/students/${enrollment_id}/performance/`);
                 setPerformance(resp.data);
             } catch (err) {
                 showToast("Failed to load student performance.", "error");
@@ -62,7 +58,7 @@ export default function TeacherStudentPerformance() {
     const getImageUrl = (path: string | null) => {
         if (!path) return "https://ui-avatars.com/api/?name=User&background=random";
         if (path.startsWith('http')) return path;
-        return `http://localhost:8000${path}`;
+        return `${API_BASE_URL}${path}`;
     };
 
     if (loading) return (

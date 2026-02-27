@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router";
-import axios from "axios";
+import api from "../api";
 
 export function meta() {
     return [{ title: "Join VetriAcademy | Create Account" }];
@@ -44,7 +44,7 @@ export default function Register() {
         setError("");
 
         try {
-            await axios.post("http://localhost:8000/api/accounts/register/", {
+            await api.post("/api/accounts/register/", {
                 username: formData.username,
                 email: formData.email,
                 password: formData.password,
