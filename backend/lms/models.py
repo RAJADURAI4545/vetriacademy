@@ -18,18 +18,20 @@ class Course(models.Model):
 
     @property
     def average_attendance(self):
-        from django.db.models import Avg
-        enrollments = self.enrollments.all()
-        if not enrollments.exists():
+        try:
+            from django.db.models import Avg
+            enrollments = self.enrollments.all()
+            if not enrollments.exists():
+                return 0
+            total_pct = 0
+            count = 0
+            for enr in enrollments:
+                if hasattr(enr, 'attendance') and enr.attendance:
+                    total_pct += enr.attendance.attendance_percentage
+                    count += 1
+            return total_pct / count if count > 0 else 0
+        except:
             return 0
-        # Calculate manually because attendance is a separate model
-        total_pct = 0
-        count = 0
-        for enr in enrollments:
-            if hasattr(enr, 'attendance'):
-                total_pct += enr.attendance.attendance_percentage
-                count += 1
-        return total_pct / count if count > 0 else 0
 
 class Enrollment(models.Model):
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='enrollments')
