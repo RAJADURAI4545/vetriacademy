@@ -19,11 +19,13 @@ class GradeSerializer(serializers.ModelSerializer):
         fields = ('grade', 'updated_at')
 
 class AttendanceSerializer(serializers.ModelSerializer):
+    percentage = serializers.ReadOnlyField(source='attendance_percentage')
     class Meta:
         model = Attendance
-        fields = ('attendance_percentage', 'total_classes', 'attended_classes')
+        fields = ('percentage', 'total_classes', 'attended_classes')
 
 class EnrollmentSerializer(serializers.ModelSerializer):
+    student = UserSerializer(read_only=True)
     course = CourseSerializer(read_only=True)
     grade = GradeSerializer(read_only=True)
     attendance = AttendanceSerializer(read_only=True)
