@@ -195,6 +195,14 @@ export default function Dashboard() {
         i18n.changeLanguage(nextLng);
     };
 
+    useEffect(() => {
+        if (data) {
+            if (data.is_staff || data.student.is_teacher) {
+                navigate("/teacher-dashboard");
+            }
+        }
+    }, [data, navigate]);
+
     const fetchData = async () => {
         const token = localStorage.getItem("access_token");
         if (!token) { navigate("/login"); return; }
