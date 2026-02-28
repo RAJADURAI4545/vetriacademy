@@ -45,10 +45,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware', # For serving static files
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -64,11 +64,17 @@ if not DEBUG:
         _cors_env.split(',')
         if _cors_env
         else [
-            'https://vetriacademy-myih.vercel.app',
             'https://vetri-academy-frontend.vercel.app',
-            'https://vetriacademy-xp5b.vercel.app'
+            'https://vetriacademy-myih.vercel.app',
+            'https://vetriacademy-xp5b.vercel.app',
         ]
     )
+    CSRF_TRUSTED_ORIGINS = [
+        'https://vetri-academy-frontend.vercel.app',
+        'https://vetriacademy-myih.vercel.app',
+        'https://vetriacademy-xp5b.vercel.app',
+        'https://vetriacademy.onrender.com'
+    ]
 
 AUTH_USER_MODEL = 'accounts.User'
 
