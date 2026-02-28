@@ -75,6 +75,21 @@ if not DEBUG:
         'https://vetriacademy-xp5b.vercel.app',
         'https://vetriacademy.onrender.com'
     ]
+    CORS_ALLOW_HEADERS = [
+        "accept",
+        "accept-encoding",
+        "authorization",
+        "content-type",
+        "dnt",
+        "origin",
+        "user-agent",
+        "x-csrftoken",
+        "x-requested-with",
+    ]
+    CSRF_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SECURE = True
 
 AUTH_USER_MODEL = 'accounts.User'
 
