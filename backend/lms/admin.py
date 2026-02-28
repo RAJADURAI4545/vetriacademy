@@ -297,8 +297,8 @@ class DailyChallengeAdmin(admin.ModelAdmin):
 
 @admin.register(ChallengeSubmission)
 class ChallengeSubmissionAdmin(admin.ModelAdmin):
-    list_display = ('student', 'challenge', 'status', 'quiz_score', 'total_quiz_questions', 'submitted_at')
-    list_filter = ('status', 'challenge__challenge_type', 'challenge__course')
+    list_display = ('student', 'challenge', 'status', 'submitted_at')
+    list_filter = ('status', 'challenge__course')
     search_fields = ('student__username', 'challenge__mission')
     readonly_fields = ('submitted_at',)
     
