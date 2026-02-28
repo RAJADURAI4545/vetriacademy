@@ -21,11 +21,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-7927^yj7$uvo#&gfdov3jf=s@^
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 _allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
-ALLOWED_HOSTS = (
-    _allowed_hosts_env.split(',')
-    if _allowed_hosts_env
-    else ['localhost', '127.0.0.1', '.vercel.app', '.onrender.com', 'vetriacademy.onrender.com']
-)
+ALLOWED_HOSTS = [
+    'localhost', '127.0.0.1', 
+    'vetriacademy.onrender.com', 
+    '.onrender.com', 
+    '.vercel.app'
+]
 
 
 # Application definition
