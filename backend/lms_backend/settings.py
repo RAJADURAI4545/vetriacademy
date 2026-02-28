@@ -63,7 +63,11 @@ if not DEBUG:
     CORS_ALLOWED_ORIGINS = (
         _cors_env.split(',')
         if _cors_env
-        else ['https://vetriacademy-myih.vercel.app']
+        else [
+            'https://vetriacademy-myih.vercel.app',
+            'https://vetri-academy-frontend.vercel.app',
+            'https://vetriacademy-xp5b.vercel.app'
+        ]
     )
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -113,7 +117,7 @@ DATABASES = {
 
 
 # Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+# https://docs.djangoproject.com/zen/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
