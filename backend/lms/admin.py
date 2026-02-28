@@ -20,11 +20,13 @@ class CourseAdmin(admin.ModelAdmin):
     
     @admin.display(description='Students')
     def get_student_count(self, obj):
-        return obj.total_students
+        return obj.total_students if hasattr(obj, 'enrollments') else 0
 
     @admin.display(description='Avg Attendance')
     def get_avg_attendance(self, obj):
-        return f"{obj.average_attendance:.1f}%"
+        if hasattr(obj, 'enrollments'):
+            return f"{obj.average_attendance:.1f}%"
+        return "N/A"
 
 class GradeInline(admin.StackedInline):
     model = Grade
