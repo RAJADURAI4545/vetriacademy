@@ -219,8 +219,48 @@ export default function TeacherDashboard() {
         }
     }, [selectedCourseId, activeTab, attendanceDate]);
 
-    const handleAttendanceChange = (studentId: number, status: "present" | "absent") => {
+    const handleAttendanceChange = async (studentId: number, status: "present" | "absent") => {
+        // Optimistic UI update
         setStudents(prev => prev.map(s => s.id === studentId ? { ...s, current_status: status } : s));
+
+        // Auto-save to backend
+        try {
+            const student = students.find(st => st.id === studentId);
+            if (!student) return;
+
+            await api.post("/api/lms/teacher/attendance/mark/", {
+                date: attendanceDate,
+                attendance: [{
+                    student_id: student.student_details.id,
+                    status: status
+                }]
+            });
+            // showToast("Saved", "success");
+        } catch (err) {
+            showToast("Failed to auto-save attendance", "error");
+        }
+    };
+
+    const markAllPresent = async () => {
+        if (students.length === 0) return;
+
+        const attendanceData = students.map(s => ({
+            student_id: s.student_details.id,
+            status: 'present' as const
+        }));
+
+        // Optimistic UI update
+        setStudents(prev => prev.map(s => ({ ...s, current_status: 'present' as const })));
+
+        try {
+            await api.post("/api/lms/teacher/attendance/mark/", {
+                date: attendanceDate,
+                attendance: attendanceData
+            });
+            showToast("All students marked present", "success");
+        } catch (err) {
+            showToast("Failed to save bulk attendance", "error");
+        }
     };
 
     const updateStudentProgress = async (enrollmentId: number, progress: number) => {
@@ -425,8 +465,13 @@ export default function TeacherDashboard() {
                                 <div style={{ padding: "16px 24px", borderBottom: "1px solid #2D3748", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#131825" }}>
                                     <h3 style={{ fontSize: 16, fontWeight: 700 }}>{t("students_list")}</h3>
                                     <div style={{ display: 'flex', gap: 12 }}>
-                                        <button className="btn-gold" disabled={saving || students.length === 0} onClick={saveAttendance}>
-                                            {saving ? t("saving") : t("save_daily_attendance")}
+                                        <button
+                                            className="btn-gold"
+                                            style={{ background: '#10B981', color: 'white' }}
+                                            onClick={markAllPresent}
+                                            disabled={students.length === 0}
+                                        >
+                                            ✓ Mark All Present
                                         </button>
                                     </div>
                                 </div>
