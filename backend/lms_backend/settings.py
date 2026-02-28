@@ -57,19 +57,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all in dev
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 if not DEBUG:
-    _cors_env = os.getenv('CORS_ALLOWED_ORIGINS', '')
-    CORS_ALLOWED_ORIGINS = (
-        _cors_env.split(',')
-        if _cors_env
-        else [
-            'https://vetri-academy-frontend.vercel.app',
-            'https://vetriacademy-myih.vercel.app',
-            'https://vetriacademy-xp5b.vercel.app',
-        ]
-    )
     CSRF_TRUSTED_ORIGINS = [
         'https://vetri-academy-frontend.vercel.app',
         'https://vetriacademy-myih.vercel.app',
