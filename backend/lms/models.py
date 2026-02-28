@@ -7,6 +7,7 @@ class Course(models.Model):
     duration = models.CharField(max_length=100)
     course_image = models.ImageField(upload_to='courses/', blank=True, null=True)
     total_classes_completed = models.IntegerField(default=0, help_text="Number of classes completed for this course so far")
+    course_progress = models.IntegerField(default=0, help_text="Global progress percentage for this course (0-100)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -18,20 +19,18 @@ class Course(models.Model):
 
     @property
     def average_attendance(self):
-        try:
-            from django.db.models import Avg
-            enrollments = self.enrollments.all()
-            if not enrollments.exists():
-                return 0
-            total_pct = 0
-            count = 0
-            for enr in enrollments:
-                if hasattr(enr, 'attendance') and enr.attendance:
-                    total_pct += enr.attendance.attendance_percentage
-                    count += 1
-            return total_pct / count if count > 0 else 0
-        except:
+        from django.db.models import Avg
+        enrollments = self.enrollments.all()
+        if not enrollments.exists():
             return 0
+        # Calculate manually because attendance is a separate model
+        total_pct = 0
+        count = 0
+        for enr in enrollments:
+            if hasattr(enr, 'attendance'):
+                total_pct += enr.attendance.attendance_percentage
+                count += 1
+        return total_pct / count if count > 0 else 0
 
 class Enrollment(models.Model):
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='enrollments')

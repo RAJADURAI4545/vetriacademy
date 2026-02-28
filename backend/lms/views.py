@@ -508,6 +508,30 @@ class TeacherUpdateProgressView(generics.GenericAPIView):
         except Enrollment.DoesNotExist:
             return Response({"detail": "Enrollment not found."}, status=status.HTTP_404_NOT_FOUND)
 
+class TeacherUpdateCourseProgressView(generics.GenericAPIView):
+    permission_classes = [IsTeacher]
+
+    def post(self, request):
+        teacher = request.user
+        course_id = request.data.get('course_id')
+        progress = request.data.get('progress')
+
+        try:
+            course = Course.objects.get(id=course_id)
+            # Security: ensure teacher is assigned to this course
+            if not TeacherCourseAssignment.objects.filter(teacher=teacher, course=course).exists():
+                return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+            
+            course.course_progress = progress
+            course.save()
+
+            # Sync to all students in this course
+            Enrollment.objects.filter(course=course).update(manual_progress=progress)
+            
+            return Response({"detail": f"Course progress updated to {progress}% and synced to all students."})
+        except Course.DoesNotExist:
+            return Response({"detail": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
+
 class TeacherStudentPerformanceView(generics.RetrieveAPIView):
     serializer_class = TeacherStudentSerializer
     permission_classes = [IsTeacher]

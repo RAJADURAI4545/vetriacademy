@@ -29,6 +29,7 @@ interface AssignedCourse {
     course: number;
     course_name: string;
     student_count: number;
+    course_progress: number;
 }
 
 interface DashboardSummary {
@@ -276,6 +277,32 @@ export default function TeacherDashboard() {
         }
     };
 
+    const updateCourseProgress = async (courseId: number, progress: number) => {
+        try {
+            await api.post("/api/lms/teacher/update-course-progress/", {
+                course_id: courseId,
+                progress: progress
+            });
+            // Update local state
+            setSummary(prev => {
+                if (!prev) return null;
+                return {
+                    ...prev,
+                    assigned_courses: prev.assigned_courses.map(c =>
+                        c.course === courseId ? { ...c, course_progress: progress } : c
+                    )
+                };
+            });
+            // Also refresh student list if active
+            if (activeTab === 'students' && selectedCourseId === String(courseId)) {
+                fetchStudents();
+            }
+            showToast("Course progress synced to all students!", "success");
+        } catch (err) {
+            showToast("Failed to update course progress", "error");
+        }
+    };
+
     const saveAttendance = async () => {
         if (!selectedCourseId) {
             showToast(t("select_course"), "error");
@@ -421,16 +448,53 @@ export default function TeacherDashboard() {
                                 </div>
                             </div>
                             <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 20 }}>{t("my_assigned_courses")}</h3>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: 20 }}>
                                 {summary?.assigned_courses.map(c => (
-                                    <div key={c.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <div>
-                                            <div style={{ fontWeight: 800, fontSize: 18, color: "#F1F5F9" }}>{c.course_name}</div>
-                                            <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>{c.student_count} Students</div>
+                                    <div key={c.id} className="card">
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+                                            <div>
+                                                <div style={{ fontWeight: 800, fontSize: 18, color: "#F1F5F9" }}>{c.course_name}</div>
+                                                <div style={{ fontSize: 14, color: "#64748B", marginTop: 4 }}>{c.student_count} Students Enrolled</div>
+                                            </div>
+                                            <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => { setSelectedCourseId(String(c.course)); setActiveTab("students"); }}>
+                                                {t("manage")}
+                                            </button>
                                         </div>
-                                        <button className="btn-gold" onClick={() => { setSelectedCourseId(String(c.course)); setActiveTab("students"); }}>
-                                            {t("manage")}
-                                        </button>
+
+                                        <div style={{ borderTop: '1px solid #2D3748', paddingTop: 16 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                                <span style={{ fontSize: 13, fontWeight: 700, color: '#94A3B8' }}>Universal Course Progress</span>
+                                                <span style={{ fontSize: 14, fontWeight: 900, color: '#F59E0B' }}>{c.course_progress}%</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    value={c.course_progress || 0}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        setSummary(prev => {
+                                                            if (!prev) return null;
+                                                            return {
+                                                                ...prev,
+                                                                assigned_courses: prev.assigned_courses.map(sc =>
+                                                                    sc.course === c.course ? { ...sc, course_progress: val } : sc
+                                                                )
+                                                            };
+                                                        });
+                                                    }}
+                                                    style={{ flex: 1, accentColor: '#F59E0B' }}
+                                                />
+                                                <button
+                                                    onClick={() => updateCourseProgress(c.course, c.course_progress)}
+                                                    style={{ background: '#F59E0B1A', border: '1px solid #F59E0B40', color: '#F59E0B', padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}
+                                                >
+                                                    Sync All
+                                                </button>
+                                            </div>
+                                            <p style={{ fontSize: 10, color: '#64748B', marginTop: 8, fontStyle: 'italic' }}>* This value reflects to all students in this course instantly.</p>
+                                        </div>
                                     </div>
                                 ))}
                             </div>

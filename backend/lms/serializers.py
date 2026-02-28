@@ -145,10 +145,11 @@ class CompetitionAttemptSerializer(serializers.ModelSerializer):
 class TeacherCourseAssignmentSerializer(serializers.ModelSerializer):
     course_name = serializers.CharField(source='course.course_name', read_only=True)
     student_count = serializers.IntegerField(source='course.total_students', read_only=True)
+    course_progress = serializers.IntegerField(source='course.course_progress', read_only=True)
     
     class Meta:
         model = TeacherCourseAssignment
-        fields = ('id', 'course', 'course_name', 'student_count')
+        fields = ('id', 'course', 'course_name', 'student_count', 'course_progress')
 
 class TeacherStudentSerializer(serializers.ModelSerializer):
     student_details = serializers.SerializerMethodField()

@@ -24,6 +24,7 @@ urlpatterns = [
     path('teacher/students/', views.TeacherStudentListView.as_view(), name='teacher-students'),
     path('teacher/attendance/mark/', views.TeacherMarkAttendanceView.as_view(), name='teacher-mark-attendance'),
     path('teacher/update-progress/', views.TeacherUpdateProgressView.as_view(), name='teacher-update-progress'),
+    path('teacher/update-course-progress/', views.TeacherUpdateCourseProgressView.as_view(), name='teacher-update-course-progress'),
     path('teacher/students/<int:enrollment_id>/performance/', views.TeacherStudentPerformanceView.as_view(), name='teacher-student-performance'),
 
     # Daily Challenge Endpoints
