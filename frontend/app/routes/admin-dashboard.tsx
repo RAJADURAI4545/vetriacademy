@@ -101,11 +101,17 @@ export default function AdminDashboard() {
         }
     };
 
-    const filteredEnrollments = enrollments.filter(enr =>
-        enr.student.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        enr.student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        enr.course.course_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredEnrollments = enrollments.filter(enr => {
+        if (!enr?.student) return false;
+        const username = enr.student.username?.toLowerCase() || "";
+        const email = enr.student.email?.toLowerCase() || "";
+        const courseName = enr.course?.course_name?.toLowerCase() || "";
+        const search = searchTerm.toLowerCase();
+
+        return username.includes(search) ||
+            email.includes(search) ||
+            courseName.includes(search);
+    });
 
     if (loading) return <div className="p-12 text-center text-gray-500">Loading master records...</div>;
     if (error) return (
@@ -183,25 +189,25 @@ export default function AdminDashboard() {
                             {filteredEnrollments.map(enr => (
                                 <tr key={enr.id} className="hover:bg-blue-50/30 transition-colors">
                                     <td className="px-8 py-6">
-                                        <div className="font-bold text-gray-900">{enr.student.username}</div>
-                                        <div className="text-sm text-gray-500">{enr.student.email}</div>
+                                        <div className="font-bold text-gray-900">{enr.student?.username || "Unknown"}</div>
+                                        <div className="text-sm text-gray-500">{enr.student?.email || "No Email"}</div>
                                     </td>
                                     <td className="px-8 py-6">
                                         <span className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full">
-                                            {enr.course.course_name}
+                                            {enr.course?.course_name || "No Course"}
                                         </span>
                                     </td>
                                     <td className="px-8 py-6">
-                                        <div className={`text-xl font-black ${enr.grade.grade ? "text-gray-900" : "text-gray-300"}`}>
-                                            {enr.grade.grade || "Wait"}
+                                        <div className={`text-xl font-black ${enr.grade?.grade ? "text-gray-900" : "text-gray-300"}`}>
+                                            {enr.grade?.grade || "Wait"}
                                         </div>
                                     </td>
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-2">
                                             <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-blue-600" style={{ width: `${enr.attendance.percentage}%` }}></div>
+                                                <div className="h-full bg-blue-600" style={{ width: `${enr.attendance?.percentage || 0}%` }}></div>
                                             </div>
-                                            <span className="text-sm font-bold text-blue-600">{Math.round(enr.attendance.percentage)}%</span>
+                                            <span className="text-sm font-bold text-blue-600">{Math.round(enr.attendance?.percentage || 0)}%</span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6">
