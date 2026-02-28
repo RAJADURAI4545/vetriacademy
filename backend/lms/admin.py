@@ -45,13 +45,19 @@ class EnrollmentAdmin(admin.ModelAdmin):
 
     @admin.display(description='Grade')
     def get_grade(self, obj):
-        return obj.grade.grade if hasattr(obj, 'grade') else "N/A"
+        try:
+            return obj.grade.grade if hasattr(obj, 'grade') and obj.grade else "N/A"
+        except:
+            return "Error (DB)"
 
     @admin.display(description='Attendance')
     def get_attendance(self, obj):
-        if hasattr(obj, 'attendance'):
-            return f"{obj.attendance.attendance_percentage:.1f}% ({obj.attendance.attended_classes}/{obj.attendance.total_classes})"
-        return "N/A"
+        try:
+            if hasattr(obj, 'attendance') and obj.attendance:
+                return f"{obj.attendance.attendance_percentage:.1f}%"
+            return "N/A"
+        except:
+            return "Error (DB)"
 
 @admin.register(Grade)
 class GradeAdmin(admin.ModelAdmin):
@@ -92,11 +98,17 @@ class AttendanceAdmin(admin.ModelAdmin):
 
     @admin.display(description='%')
     def get_percent(self, obj):
-        return f"{obj.attendance_percentage:.1f}%"
+        try:
+            return f"{obj.attendance_percentage:.1f}%"
+        except:
+            return "0%"
 
     @admin.display(description='Last Log')
     def get_last_log(self, obj):
-        return obj.last_log_date or "No Logs"
+        try:
+            return obj.last_log_date or "No Logs"
+        except:
+            return "N/A"
 
 @admin.register(AttendanceLog)
 class AttendanceLogAdmin(admin.ModelAdmin):
