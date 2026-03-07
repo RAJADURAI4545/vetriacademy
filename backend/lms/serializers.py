@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from .models import (
     Course, Enrollment, Grade, Attendance, DailyAttendanceLog, AttendanceLog, 
     Competition, CompetitionParticipant, Badge, UserBadge, QuizQuestion, 
@@ -215,6 +216,8 @@ class DailyChallengeSerializer(serializers.ModelSerializer):
         quiz_questions_data = validated_data.pop('quiz_questions', [])
         challenge = DailyChallenge.objects.create(**validated_data)
         for question_data in quiz_questions_data:
+            # Defensive: remove id if present
+            question_data.pop('id', None)
             DailyChallengeQuestion.objects.create(challenge=challenge, **question_data)
         return challenge
 

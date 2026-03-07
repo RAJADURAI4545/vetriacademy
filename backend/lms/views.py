@@ -1,5 +1,6 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from .models import (
     Course, Enrollment, Grade, Attendance, DailyAttendanceLog, AttendanceLog, 
     Competition, CompetitionParticipant, Badge, UserBadge, QuizQuestion, 
@@ -568,7 +569,7 @@ class DailyChallengeListView(generics.ListAPIView):
         ).prefetch_related(
             'quiz_questions',
             Prefetch(
-                'challenge_submissions',
+                'submissions',
                 queryset=ChallengeSubmission.objects.filter(student=user),
                 to_attr='user_submissions'
             )
@@ -696,19 +697,20 @@ class DailyChallengeCreateView(generics.CreateAPIView):
     permission_classes = [IsTeacher]
 
     def perform_create(self, serializer):
-        course_id = self.request.data.get('course')
-        if not course_id:
-            from rest_framework.exceptions import ValidationError
+        course_data = self.request.data.get('course')
+        if not course_data:
             raise ValidationError({"course": "Course ID is required."})
             
+        # course_data might be an ID (string/int) or already a Course object from serializer validation
         try:
-            course_id_int = int(course_id)
+            if hasattr(course_data, 'id'):
+                course_id = course_data.id
+            else:
+                course_id = int(course_data)
         except (ValueError, TypeError):
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({"course": "Invalid Course ID."})
+             raise ValidationError({"course": "Invalid Course ID."})
 
-        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course_id=course_id_int).exists():
-            from rest_framework.exceptions import PermissionDenied
+        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course_id=course_id).exists():
             raise PermissionDenied("You are not assigned to this course.")
         serializer.save()
 
