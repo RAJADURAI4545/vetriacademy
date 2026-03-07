@@ -200,7 +200,7 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
 class DailyChallengeQuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = DailyChallengeQuestion
-        fields = '__all__'
+        fields = ('id', 'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option')
 
 class DailyChallengeSerializer(serializers.ModelSerializer):
     course_name = serializers.CharField(source='course.course_name', read_only=True)
@@ -208,10 +208,11 @@ class DailyChallengeSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = DailyChallenge
-        fields = '__all__'
+        fields = ('id', 'course', 'course_name', 'mission', 'challenge_type', 'deadline', 
+                  'allow_audio', 'allow_text', 'allow_file', 'reward_xp', 'created_at', 'quiz_questions')
 
     def create(self, validated_data):
-        quiz_questions_data = self.initial_data.get('quiz_questions', [])
+        quiz_questions_data = validated_data.pop('quiz_questions', [])
         challenge = DailyChallenge.objects.create(**validated_data)
         for question_data in quiz_questions_data:
             DailyChallengeQuestion.objects.create(challenge=challenge, **question_data)

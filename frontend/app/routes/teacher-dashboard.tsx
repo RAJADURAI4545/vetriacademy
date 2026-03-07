@@ -186,7 +186,14 @@ export default function TeacherDashboard() {
         }
         setIsSavingMission(true);
         try {
-            await api.post("/api/lms/teacher/daily-challenges/create/", newMission);
+            // Ensure deadline has a time component
+            const formattedMission = {
+                ...newMission,
+                deadline: newMission.deadline.includes('T') ? newMission.deadline : `${newMission.deadline}T23:59:59Z`,
+                reward_xp: isNaN(newMission.reward_xp) ? 100 : newMission.reward_xp
+            };
+
+            await api.post("/api/lms/teacher/daily-challenges/create/", formattedMission);
             showToast("Mission assigned successfully!", "success");
             setIsCreatingMission(false);
             setNewMission({
@@ -202,7 +209,20 @@ export default function TeacherDashboard() {
             });
             if (activeTab === 'missions') fetchSubmissions();
         } catch (err: any) {
-            showToast(err.response?.data?.detail || "Failed to create mission", "error");
+            console.error(err);
+            let errorMsg = "Failed to create mission";
+            if (err.response?.data) {
+                if (typeof err.response.data === 'string') {
+                    errorMsg = err.response.data;
+                } else if (err.response.data.detail) {
+                    errorMsg = err.response.data.detail;
+                } else if (typeof err.response.data === 'object') {
+                    errorMsg = Object.entries(err.response.data)
+                        .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(", ") : val}`)
+                        .join(" | ");
+                }
+            }
+            showToast(errorMsg, "error");
         } finally {
             setIsSavingMission(false);
         }

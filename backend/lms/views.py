@@ -45,6 +45,9 @@ class EnrollCourseView(generics.CreateAPIView):
             return Response({"detail": f"Successfully enrolled in {course.course_name}!"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+from django.db.models import Prefetch, Window, Count, F
+from django.db.models.functions import Rank
+
 class StudentDashboardView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -59,10 +62,22 @@ class StudentDashboardView(generics.GenericAPIView):
         user_data = UserSerializer(user).data
         enrollments_data = EnrollmentSerializer(enrollments, many=True).data
         
+        # Prefetch total students per course to avoid N+1
+        course_counts = {
+            c['course_id']: c['count'] 
+            for c in Enrollment.objects.values('course_id').annotate(count=models.Count('id'))
+        }
+
         for data in enrollments_data:
             course_id = data['course']['id']
             current_grade = data['grade']['grade']
+            
+            # Use cached counts
+            data['course_total_students'] = course_counts.get(course_id, 0)
+            
             if current_grade:
+                # Still a query per rank, but total_students is now optimized.
+                # For a more radical fix, we'd need a cross-course ranking model.
                 better_students = Enrollment.objects.filter(
                     course_id=course_id,
                     grade__grade__lt=current_grade
@@ -70,8 +85,6 @@ class StudentDashboardView(generics.GenericAPIView):
                 data['rank'] = better_students + 1
             else:
                 data['rank'] = "N/A"
-            
-            data['course_total_students'] = Enrollment.objects.filter(course_id=course_id).count()
 
         total_attendance = 0
         count = 0
@@ -550,17 +563,25 @@ class DailyChallengeListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         enrolled_course_ids = Enrollment.objects.filter(student=user).values_list('course_id', flat=True)
-        return DailyChallenge.objects.filter(course_id__in=enrolled_course_ids).prefetch_related('quiz_questions').order_by('-created_at')
+        return DailyChallenge.objects.filter(
+            course_id__in=enrolled_course_ids
+        ).prefetch_related(
+            'quiz_questions',
+            Prefetch(
+                'challenge_submissions',
+                queryset=ChallengeSubmission.objects.filter(student=user),
+                to_attr='user_submissions'
+            )
+        ).order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        # Use simple list if not many challenges, or paginate
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
         
-        # Add submission info for each challenge for the current user
-        for item in data:
-            submission = ChallengeSubmission.objects.filter(challenge_id=item['id'], student=request.user).first()
+        for idx, item in enumerate(data):
+            obj = queryset[idx]
+            submission = obj.user_submissions[0] if obj.user_submissions else None
             if submission:
                 item['user_submission'] = ChallengeSubmissionSerializer(submission).data
             else:
@@ -676,7 +697,17 @@ class DailyChallengeCreateView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         course_id = self.request.data.get('course')
-        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course_id=course_id).exists():
+        if not course_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"course": "Course ID is required."})
+            
+        try:
+            course_id_int = int(course_id)
+        except (ValueError, TypeError):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"course": "Invalid Course ID."})
+
+        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course_id=course_id_int).exists():
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("You are not assigned to this course.")
         serializer.save()
