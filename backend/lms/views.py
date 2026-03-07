@@ -1,6 +1,8 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError, PermissionDenied
+from django.db import models
+from django.db.models import Prefetch, Window, Count, F
 from .models import (
     Course, Enrollment, Grade, Attendance, DailyAttendanceLog, AttendanceLog, 
     Competition, CompetitionParticipant, Badge, UserBadge, QuizQuestion, 
@@ -66,7 +68,7 @@ class StudentDashboardView(generics.GenericAPIView):
         # Prefetch total students per course to avoid N+1
         course_counts = {
             c['course_id']: c['count'] 
-            for c in Enrollment.objects.values('course_id').annotate(count=models.Count('id'))
+            for c in Enrollment.objects.values('course_id').annotate(count=Count('id'))
         }
 
         for data in enrollments_data:
@@ -580,13 +582,17 @@ class DailyChallengeListView(generics.ListAPIView):
         serializer = self.get_serializer(queryset, many=True)
         data = serializer.data
         
+        # queryset is evaluated here, so we can access user_submissions
+        queryset_list = list(queryset)
         for idx, item in enumerate(data):
-            obj = queryset[idx]
-            submission = obj.user_submissions[0] if obj.user_submissions else None
-            if submission:
-                item['user_submission'] = ChallengeSubmissionSerializer(submission).data
-            else:
-                item['user_submission'] = None
+            if idx < len(queryset_list):
+                obj = queryset_list[idx]
+                user_subs = getattr(obj, 'user_submissions', [])
+                submission = user_subs[0] if user_subs else None
+                if submission:
+                    item['user_submission'] = ChallengeSubmissionSerializer(submission).data
+                else:
+                    item['user_submission'] = None
         
         return Response(data)
 
@@ -697,21 +703,14 @@ class DailyChallengeCreateView(generics.CreateAPIView):
     permission_classes = [IsTeacher]
 
     def perform_create(self, serializer):
-        course_data = self.request.data.get('course')
-        if not course_data:
-            raise ValidationError({"course": "Course ID is required."})
-            
-        # course_data might be an ID (string/int) or already a Course object from serializer validation
-        try:
-            if hasattr(course_data, 'id'):
-                course_id = course_data.id
-            else:
-                course_id = int(course_data)
-        except (ValueError, TypeError):
-             raise ValidationError({"course": "Invalid Course ID."})
+        # course will be a Course object in validated_data if validation passed
+        course = serializer.validated_data.get('course')
+        if not course:
+            raise ValidationError({"course": "Course is required."})
 
-        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course_id=course_id).exists():
+        if not TeacherCourseAssignment.objects.filter(teacher=self.request.user, course=course).exists():
             raise PermissionDenied("You are not assigned to this course.")
+        
         serializer.save()
 
 class TeacherChallengeListView(generics.ListAPIView):
