@@ -14,7 +14,7 @@ export default function Login() {
     const [error, setError] = React.useState("");
     const [loading, setLoading] = React.useState(false);
     const navigate = useNavigate();
-    const tokenStr = typeof window !== 'undefined' ? localStorage.getItem("access_token") : null;
+    const { showToast } = useToast();
 
     React.useEffect(() => {
         const token = localStorage.getItem("access_token");
@@ -47,14 +47,16 @@ export default function Login() {
                 navigate("/dashboard");
             }
         } catch (err: any) {
+            let msg = "";
             if (err.response) {
-                setError(err.response.status === 401
-                    ? "Incorrect email or password. Please try again."
-                    : "Server error. Please try again later."
-                );
+                msg = err.response.status === 401
+                    ? "User credentials mismatch. Please check your email and password."
+                    : "Server error. Please try again later.";
             } else {
-                setError("Unable to connect to the server. Please check your internet connection or try again later.");
+                msg = "Unable to connect to the server. Please check your internet connection.";
             }
+            setError(msg);
+            showToast(msg, "error");
         } finally {
             setLoading(false);
         }
