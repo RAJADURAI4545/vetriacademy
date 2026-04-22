@@ -211,7 +211,7 @@ export default function Login() {
                     padding: 20,
                     background: 'rgba(0, 0, 0, 0.85)',
                     backdropFilter: 'blur(8px)',
-                    animation: 'fadeIn 0.2s ease-out'
+                    animation: 'fadeIn 0.1s ease-out'
                 }}>
                     <div style={{
                         background: '#1A1F2E',
@@ -222,7 +222,7 @@ export default function Login() {
                         width: '100%',
                         textAlign: 'center',
                         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                        animation: 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        animation: 'scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
                     }}>
                         <div style={{
                             width: 64,
