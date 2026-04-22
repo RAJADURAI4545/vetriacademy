@@ -60,7 +60,6 @@ export default function Login() {
             }
             setError(msg);
             setShowErrorModal(true);
-            showToast(msg, "error");
         } finally {
             setLoading(false);
         }
