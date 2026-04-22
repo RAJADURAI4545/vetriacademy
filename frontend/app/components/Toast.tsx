@@ -76,8 +76,8 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
                     animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 @keyframes slideIn {
-                    from { transform: translateX(100%) scale(0.9); opacity: 0; }
-                    to { transform: translateX(0) scale(1); opacity: 1; }
+                    from { transform: translateY(-20px) scale(0.9); opacity: 0; }
+                    to { transform: translateY(0) scale(1); opacity: 1; }
                 }
             `}</style>
         </div>
@@ -98,14 +98,15 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, removeTo
             <style>{`
                 .toast-container {
                     position: fixed;
-                    top: 24px;
-                    right: 24px;
+                    top: 32px;
+                    left: 50%;
+                    transform: translateX(-50%);
                     z-index: 9999;
                     display: flex;
                     flex-direction: column;
-                    align-items: flex-end;
+                    align-items: center;
                     pointer-events: none;
-                    gap: 8px;
+                    gap: 12px;
                 }
             `}</style>
         </div>
