@@ -14,6 +14,7 @@ export default function Login() {
     const [showPass, setShowPass] = React.useState(false);
     const [error, setError] = React.useState("");
     const [loading, setLoading] = React.useState(false);
+    const [showErrorModal, setShowErrorModal] = React.useState(false);
     const navigate = useNavigate();
     const { showToast } = useToast();
 
@@ -58,6 +59,7 @@ export default function Login() {
                 msg = "Unable to connect to the server. Please check your internet connection.";
             }
             setError(msg);
+            setShowErrorModal(true);
             showToast(msg, "error");
         } finally {
             setLoading(false);
@@ -197,6 +199,77 @@ export default function Login() {
                     </p>
                 </div>
             </div>
+
+            {/* 🚨 Error Modal */}
+            {showErrorModal && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 10000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 20,
+                    background: 'rgba(0, 0, 0, 0.85)',
+                    backdropFilter: 'blur(8px)',
+                    animation: 'fadeIn 0.2s ease-out'
+                }}>
+                    <div style={{
+                        background: '#1A1F2E',
+                        border: '1px solid #EF444440',
+                        borderRadius: 24,
+                        padding: 40,
+                        maxWidth: 400,
+                        width: '100%',
+                        textAlign: 'center',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        animation: 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                    }}>
+                        <div style={{
+                            width: 64,
+                            height: 64,
+                            background: '#EF444422',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            margin: '0 auto 24px',
+                            fontSize: 32,
+                            color: '#EF4444'
+                        }}>
+                            ⚠️
+                        </div>
+                        <h3 style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9', marginBottom: 12 }}>Credentials Mismatch</h3>
+                        <p style={{ color: '#94A3B8', fontSize: 15, lineHeight: 1.6, marginBottom: 32 }}>
+                            The email or password you entered does not match our records. Please verify your details and try again.
+                        </p>
+                        <button 
+                            onClick={() => setShowErrorModal(false)}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                background: '#EF4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: 12,
+                                fontSize: 16,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.background = '#DC2626'}
+                            onMouseOut={e => e.currentTarget.style.background = '#EF4444'}
+                        >
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+            `}</style>
         </>
     );
 }
