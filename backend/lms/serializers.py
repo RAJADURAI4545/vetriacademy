@@ -197,13 +197,14 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
         }
 
     def get_best_competition_score(self, obj):
-        from .models import CompetitionParticipant
-        best = CompetitionParticipant.objects.filter(user=obj.student).order_by('-score').first()
-        return best.score if best else 0
+        # Use prefetched data if available
+        participants = list(obj.student.competitionparticipant_set.all())
+        if not participants:
+            return 0
+        return max(p.score for p in participants)
 
     def get_competition_records(self, obj):
-        from .models import CompetitionParticipant
-        records = CompetitionParticipant.objects.filter(user=obj.student).select_related('competition').order_by('-joined_at')
+        records = sorted(list(obj.student.competitionparticipant_set.all()), key=lambda x: x.joined_at, reverse=True)
         return [
             {
                 'competition_title': r.competition.title,
@@ -219,9 +220,19 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
         date_str = self.context.get('request').query_params.get('date') if self.context.get('request') else None
         if not date_str:
             return None
-        from .models import DailyAttendanceLog
-        log = DailyAttendanceLog.objects.filter(student=obj.student, course=obj.course, date=date_str).first()
-        return log.status if log else None
+        # Use prefetched logs
+        logs = obj.student.dailyattendancelog_set.all()
+        # Find the one for this specific course and date
+        from datetime import datetime
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except:
+            return None
+            
+        for log in logs:
+            if log.course_id == obj.course_id and log.date == target_date:
+                return log.status
+        return None
 
 class DailyChallengeQuestionSerializer(serializers.ModelSerializer):
     class Meta:

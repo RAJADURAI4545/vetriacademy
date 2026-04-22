@@ -593,11 +593,11 @@ class TeacherStudentListView(generics.ListAPIView):
         if course_id:
             if not TeacherCourseAssignment.objects.filter(teacher=teacher, course_id=course_id).exists():
                 return Enrollment.objects.none()
-            return Enrollment.objects.filter(course_id=course_id).select_related('student', 'course', 'attendance', 'grade')
+            return Enrollment.objects.filter(course_id=course_id).select_related('student', 'course', 'attendance', 'grade').prefetch_related('student__competitionparticipant_set', 'student__dailyattendancelog_set')
         
         # If no course_id, return all students in all assigned courses
         assigned_course_ids = TeacherCourseAssignment.objects.filter(teacher=teacher).values_list('course_id', flat=True)
-        return Enrollment.objects.filter(course_id__in=assigned_course_ids).select_related('student', 'course', 'attendance', 'grade')
+        return Enrollment.objects.filter(course_id__in=assigned_course_ids).select_related('student', 'course', 'attendance', 'grade').prefetch_related('student__competitionparticipant_set', 'student__dailyattendancelog_set')
 
 class TeacherMarkAttendanceView(generics.GenericAPIView):
     permission_classes = [IsTeacher]
