@@ -198,13 +198,13 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
 
     def get_best_competition_score(self, obj):
         # Use prefetched data if available
-        participants = list(obj.student.competitionparticipant_set.all())
+        participants = list(obj.student.competitions.all())
         if not participants:
             return 0
         return max(p.score for p in participants)
 
     def get_competition_records(self, obj):
-        records = sorted(list(obj.student.competitionparticipant_set.all()), key=lambda x: x.joined_at, reverse=True)
+        records = sorted(list(obj.student.competitions.all()), key=lambda x: x.joined_at, reverse=True)
         return [
             {
                 'competition_title': r.competition.title,
@@ -221,7 +221,7 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
         if not date_str:
             return None
         # Use prefetched logs
-        logs = obj.student.dailyattendancelog_set.all()
+        logs = obj.student.daily_attendance_logs.all()
         # Find the one for this specific course and date
         from datetime import datetime
         try:
