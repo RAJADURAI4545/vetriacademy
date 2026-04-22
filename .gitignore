@@ -5,6 +5,7 @@ build/
 .env.*
 venv/
 .venv/
+backend/venv/
 __pycache__/
 *.py[cod]
 *$py.class

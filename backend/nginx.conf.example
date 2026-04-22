@@ -1,0 +1,67 @@
+# Nginx Reverse Proxy Configuration for Vetri Academy
+# NOTE: On Render.com, Nginx is handled by their infrastructure.
+# This config is for self-hosted / VPS deployments only.
+#
+# Usage:
+#   1. Copy this to /etc/nginx/sites-available/vetriacademy
+#   2. Symlink: ln -s /etc/nginx/sites-available/vetriacademy /etc/nginx/sites-enabled/
+#   3. Test: nginx -t
+#   4. Reload: sudo systemctl reload nginx
+
+upstream django_backend {
+    server 127.0.0.1:8000;
+    # Add more Gunicorn instances for horizontal scaling:
+    # server 127.0.0.1:8001;
+}
+
+server {
+    listen 80;
+    server_name vetriacademy.com www.vetriacademy.com;
+
+    # Connection limits per IP (DDoS protection)
+    limit_conn_zone $binary_remote_addr zone=addr:10m;
+    limit_conn addr 20;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 256;
+    gzip_vary on;
+
+    # Serve static files directly (bypasses Gunicorn completely)
+    location /static/ {
+        alias /path/to/your/backend/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # Serve media files directly
+    location /media/ {
+        alias /path/to/your/backend/media/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    # Proxy API requests to Gunicorn
+    location / {
+        proxy_pass http://django_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+
+        # Buffering
+        proxy_buffering on;
+        proxy_buffer_size 16k;
+        proxy_buffers 4 32k;
+
+        # Max upload size (for file submissions)
+        client_max_body_size 10m;
+    }
+}

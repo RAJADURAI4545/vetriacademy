@@ -22,7 +22,11 @@ interface GamificationData {
     level: number;
     earned_badges: UserBadge[];
     all_badges: Badge[];
-    xp_to_next_level: number;
+    next_tier_name: string;
+    xp_to_next_tier: number;
+    next_tier_xp: number;
+    prev_tier_xp: number;
+    progress_percentage: number;
 }
 
 export function meta() {
@@ -60,7 +64,7 @@ export default function XPBadges() {
         </div>
     );
 
-    const xpProgress = data ? (data.xp % 1000) / 10 : 0;
+    const xpProgress = data ? data.progress_percentage : 0;
     const earnedBadgeIds = data?.earned_badges.map(eb => eb.badge.id) || [];
 
     return (
@@ -85,8 +89,12 @@ export default function XPBadges() {
                 {/* Level Progress */}
                 <section className="mb-16">
                     <div className="flex justify-between items-end mb-4">
-                        <h2 className="text-lg font-bold text-slate-200">Level Progress</h2>
-                        <span className="text-sm font-bold text-slate-500">{data?.xp_to_next_level} XP more to Level {data!?.level + 1}</span>
+                        <h2 className="text-lg font-bold text-slate-200">Tier Progress</h2>
+                        {data?.next_tier_name !== "Max Tier" ? (
+                            <span className="text-sm font-bold text-slate-500">{data?.xp_to_next_tier} XP more to {data?.next_tier_name}</span>
+                        ) : (
+                            <span className="text-sm font-bold text-amber-500">Maximum Tier Reached! 💎</span>
+                        )}
                     </div>
                     <div className="h-4 bg-slate-800 rounded-full overflow-hidden p-1 shadow-inner border border-slate-700/50">
                         <div

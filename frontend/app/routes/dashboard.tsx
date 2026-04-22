@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 import { API_BASE_URL } from "../config";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import { useToast } from "../context/NotificationContext";
 import { useTranslation } from "react-i18next";
+import type { Route } from "./+types/dashboard";
 
 interface Course {
     id: number;
@@ -51,12 +52,14 @@ interface Student {
     address?: string;
     school_name?: string;
     standard_grade?: string;
+    is_teacher?: boolean;
 }
 
 interface AttendanceLog {
     id: number;
     date: string;
     day: string;
+    course_name: string;
     status: 'present' | 'absent';
 }
 
@@ -115,6 +118,9 @@ interface DashboardData {
         overall_attendance: number;
         xp: number;
         level: number;
+        next_tier_name: string;
+        xp_to_next_tier: number;
+        progress_percentage: number;
     };
     recent_badges: Badge[];
 }
@@ -135,10 +141,29 @@ const IconCalendar = () => <svg className="w-5 h-5" fill="none" stroke="currentC
 const IconTrophy = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 const IconStar = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.175 0l-3.976 2.888c-.784.57-1.838-.196-1.539-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>;
 const IconClock = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>;
+const IconX = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>;
 
-type Tab = "overview" | "courses" | "catalog" | "attendance" | "profile";
+type Tab = "overview" | "course_hub" | "attendance" | "profile";
+
+export async function clientLoader() {
+    try {
+        const [dashRes, courseRes] = await Promise.all([
+            api.get("/api/lms/dashboard/"),
+            api.get("/api/lms/courses/")
+        ]);
+        return {
+            dashboard: dashRes.data as DashboardData,
+            allCourses: courseRes.data as Course[]
+        };
+    } catch (err) {
+        console.error("Loader error:", err);
+        return { dashboard: null, allCourses: [] };
+    }
+}
 
 export default function Dashboard() {
+    const loaderData = useLoaderData<typeof clientLoader>();
     const { t, i18n } = useTranslation();
     const { showToast } = useToast();
     const getImageUrl = (path: string | undefined | null) => {
@@ -154,11 +179,12 @@ export default function Dashboard() {
         return "#EF4444";
     };
 
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [allCourses, setAllCourses] = useState<Course[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState<DashboardData | null>(loaderData.dashboard);
+    const [allCourses, setAllCourses] = useState<Course[]>(loaderData.allCourses);
+    const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<Tab>("overview");
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [selectedCourse, setSelectedCourse] = useState<string>("all");
     // Attendance tab state
@@ -195,11 +221,35 @@ export default function Dashboard() {
         i18n.changeLanguage(nextLng);
     };
 
+    const handleDownloadAttendance = async (enrollmentId: number, courseName: string) => {
+        try {
+            showToast(`Generating attendance log for ${courseName}...`, "info");
+            const response = await api.get(`/api/lms/attendance/export/${enrollmentId}/`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Attendance_${courseName.replace(/\s+/g, '_')}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            showToast("Attendance log downloaded successfully.", "success");
+        } catch (error) {
+            console.error("Error downloading attendance:", error);
+            showToast("Failed to download attendance log. Please try again.", "error");
+        }
+    };
+
     useEffect(() => {
         if (data) {
             if (data.is_staff || data.student.is_teacher) {
                 navigate("/teacher-dashboard");
             }
+        } else {
+            // If loader failed or returned null (e.g. 401)
+            const token = localStorage.getItem("access_token");
+            if (!token) navigate("/login");
         }
     }, [data, navigate]);
 
@@ -241,7 +291,10 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        fetchData();
+        // Only run if loader didn't populate data or for background updates
+        if (!data) {
+            fetchData();
+        }
         fetchMyLogs();
         fetchChallenges();
     }, []);
@@ -272,7 +325,7 @@ export default function Dashboard() {
             showToast(res.data.detail || `Successfully enrolled in ${courseName}!`, "success");
             const dashRes = await api.get("/api/lms/dashboard/");
             setData(dashRes.data);
-            setActiveTab("courses");
+            setActiveTab("course_hub");
             fetchChallenges(); // Refresh challenges after enrollment
         } catch (error: any) { handleError(error, "Enrollment failed."); }
     };
@@ -343,8 +396,7 @@ export default function Dashboard() {
 
     const navItems: { tab: Tab; label: string; icon: React.ReactNode; path?: string }[] = [
         { tab: "overview", label: t("dashboard"), icon: <IconHome /> },
-        { tab: "courses", label: t("my_assigned_courses"), icon: <IconBook /> },
-        { tab: "catalog", label: "Catalog", icon: <IconPlus /> },
+        { tab: "course_hub", label: "My Learning Hub", icon: <IconBook /> },
         { tab: "attendance", label: t("attendance"), icon: <IconCalendar /> },
         ...(data?.is_staff ? [{ tab: "overview" as Tab, label: "Admin Attendance Log", icon: <IconCalendar />, path: "/admin-attendance" }] : []),
         { tab: "overview", label: "Competitions", icon: <IconTrophy />, path: "/competitions" },
@@ -428,10 +480,12 @@ export default function Dashboard() {
 
 
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', background: '#0F1117', color: '#F1F5F9', fontFamily: '"Inter", "Segoe UI", sans-serif' }}>
+        <div className="dashboard-container">
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
                 * { box-sizing: border-box; margin: 0; padding: 0; }
+                body { line-height: 1.5; -webkit-font-smoothing: antialiased; }
+                h1, h2, h3, h4, h5, h6 { line-height: 1.2; letter-spacing: -0.01em; }
                 ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1A1F2E; } ::-webkit-scrollbar-thumb { background: #2D3748; border-radius: 3px; }
                 .fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1); } 
                 @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
@@ -455,8 +509,11 @@ export default function Dashboard() {
                 .btn-csv:hover { background: #2D3748; color: #F1F5F9; border-color: #F59E0B; }
                 input[type=text], input[type=email], input[type=password] { background: #242938; border: 1px solid #2D3748; color: #F1F5F9; border-radius: 8px; padding: 10px 14px; font-size: 14px; width: 100%; outline: none; transition: border-color 0.2s; }
                 input:focus { border-color: #F59E0B; }
-                .lang-switch { position: fixed; top: 20px; right: 20px; background: #111827; border: 1px solid #2D3748; color: #F59E0B; padding: 8px 16px; border-radius: 99px; font-weight: 700; font-size: 13px; cursor: pointer; z-index: 100; transition: all 0.2s; }
-                .lang-switch:hover { background: #F59E0B1A; border-color: #F59E0B; }
+                .input-dark { background: #242938; border: 1px solid #2D3748; color: #F1F5F9; border-radius: 8px; padding: 10px 14px; font-size: 14px; outline: none; transition: border-color 0.2s; width: 100%; box-sizing: border-box; }
+                .input-dark:focus { border-color: #F59E0B; }
+                .lang-switch { position: fixed; top: 24px; right: 24px; background: #111827; border: 1px solid #2D3748; color: #F59E0B; padding: 12px 28px; border-radius: 99px; font-weight: 700; font-size: 14px; cursor: pointer; z-index: 100; transition: all 0.2s; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 2px solid #F59E0B33; }
+                .lang-switch:hover { background: #F59E0B; color: #0F1117; border-color: #F59E0B; transform: translateY(-2px); }
+                .lang-switch svg { width: 18px; height: 18px; }
                 .badge-item:hover {
                     transform: translateY(-5px);
                     background: #1F2937 !important;
@@ -470,31 +527,87 @@ export default function Dashboard() {
                 .challenge-icon { position: absolute; top: -10px; right: -10px; font-size: 80px; opacity: 0.1; transform: rotate(15deg); }
                 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
                 .modal-content { background: #1A1F2E; border: 1px solid #2D3748; border-radius: 24px; width: 100%; max-width: 500px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative; }
+                
+                .mobile-header { display: none; }
+                .mobile-overlay { display: none; }
+                
+                /* Responsiveness Additions */
+                .dashboard-container { display: flex; height: 100vh; width: 100%; overflow: hidden; background: #0F1117; color: #F1F5F9; font-family: "Inter", "Segoe UI", sans-serif; }
+                .main-content { flex: 1; overflow-y: auto; padding: 100px 48px 48px 64px; width: 100%; box-sizing: border-box; background: #0F1117; }
+                .img-responsive { max-width: 100%; height: auto; }
+                .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+
+                @media (max-width: 1024px) {
+                    .stat-grid-summary { grid-template-columns: repeat(2, 1fr) !important; }
+                    .overview-main-grid { grid-template-columns: 1fr !important; }
+                }
+
+                @media (max-width: 768px) {
+                    .mobile-header { display: flex !important; }
+                    .mobile-overlay { display: block !important; }
+                    .dashboard-container { flex-direction: column; }
+                    .sidebar { position: fixed !important; bottom: 0; left: 0 !important; width: 100% !important; height: 64px !important; flex-direction: row !important; border-right: none !important; border-top: 1px solid #1E293B !important; z-index: 1000 !important; padding: 0 !important; justify-content: space-around !important; background: #0F172A !important; top: auto !important; }
+                    .sidebar > div:first-child, .sidebar > div:last-child { display: none !important; }
+                    .sidebar nav { flex-direction: row !important; gap: 0 !important; width: 100% !important; padding: 0 !important; }
+                    .nav-btn { flex-direction: column !important; height: 100% !important; flex: 1 !important; padding: 8px 0 !important; border-left: none !important; border-bottom: 3px solid transparent !important; gap: 4px !important; justify-content: center !important; }
+                    .nav-btn.active { border-left: none !important; border-bottom: 3px solid #F59E0B !important; background: transparent !important; }
+                    .nav-btn svg { width: 20px !important; height: 20px !important; }
+                    .nav-btn span:last-child { font-size: 10px !important; }
+                    .main-content { padding: 84px 16px 100px 16px !important; }
+                    .header-flex { flex-direction: column; align-items: flex-start !important; gap: 16px; }
+                    .stat-grid-summary { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+                    .desktop-sidebar-toggle { display: none !important; }
+                    .lang-switch { display: none !important; }
+                }
+
+                @media (max-width: 480px) {
+                    .stat-grid-summary { grid-template-columns: 1fr !important; }
+                    .course-grid { grid-template-columns: 1fr !important; }
+                    .modal-content { padding: 24px 16px; border-radius: 16px; }
+                    .btn-gold, .btn-secondary { width: 100%; text-align: center; }
+                    .table-row { padding: 12px 10px !important; }
+                }
             `}</style>
 
             <button className="lang-switch" onClick={toggleLanguage}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 {i18n.language === 'en' ? 'தமிழ்' : 'English'}
             </button>
 
+            {/* ── MOBILE HEADER ── */}
+            <div className="mobile-header" style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 64, background: '#111827', borderBottom: '1px solid #1E293B', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', zIndex: 90 }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 28, height: 28, background: 'linear-gradient(135deg, #F59E0B, #D97706)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F1117', fontSize: 16 }}>V</div>
+                    VETRI
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                    <button onClick={toggleLanguage} style={{ background: 'none', border: 'none', color: '#F59E0B', fontWeight: 700, fontSize: 13 }}>
+                        {i18n.language === 'en' ? 'TA' : 'EN'}
+                    </button>
+                    <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} style={{ color: '#F59E0B' }}>
+                        {isMobileMenuOpen ? <IconX /> : <IconMenu />}
+                    </button>
+                </div>
+            </div>
+
             {/* ── SIDEBAR ── */}
-            <aside style={{ width: isSidebarCollapsed ? 80 : 260, background: 'linear-gradient(180deg, #111827 0%, #0F172A 100%)', borderRight: '1px solid #1E293B', display: 'flex', flexDirection: 'column', padding: '32px 0 24px 0', flexShrink: 0, position: 'sticky', top: 0, height: '100vh', backdropFilter: 'blur(20px)', transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            {isMobileMenuOpen && <div onClick={() => setIsMobileMenuOpen(false)} className="mobile-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 95 }}></div>}
+
+            <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`} style={{ width: isSidebarCollapsed ? 80 : 260, background: 'linear-gradient(180deg, #111827 0%, #0F172A 100%)', borderRight: '1px solid #1E293B', display: 'flex', flexDirection: 'column', padding: '32px 0 24px 0', flexShrink: 0, position: 'sticky', top: 0, height: '100vh', backdropFilter: 'blur(20px)', transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)', zIndex: 100 }}>
                 {/* Logo & Toggle */}
                 <div style={{ padding: '0 24px', marginBottom: 40, display: 'flex', alignItems: 'center', justifyContent: isSidebarCollapsed ? 'center' : 'space-between' }}>
-                    {!isSidebarCollapsed && (
-                        <div style={{ fontSize: 22, fontWeight: 900, color: '#F59E0B', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ width: 32, height: 32, background: 'linear-gradient(135deg, #F59E0B, #D97706)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F1117', fontSize: 18 }}>V</div>
-                            VETRI
-                        </div>
-                    )}
-                    {isSidebarCollapsed && (
+                    <div style={{ fontSize: 22, fontWeight: 900, color: '#F59E0B', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ width: 32, height: 32, background: 'linear-gradient(135deg, #F59E0B, #D97706)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F1117', fontSize: 18 }}>V</div>
-                    )}
+                        {!isSidebarCollapsed && <span>VETRI</span>}
+                    </div>
                     <button
                         onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                        className="desktop-sidebar-toggle"
                         style={{ background: 'rgba(245,158,11,0.1)', border: 'none', color: '#F59E0B', padding: 8, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transform: isSidebarCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s' }}
                     >
                         <svg style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
                     </button>
+                    <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden" style={{ color: '#F59E0B' }}><IconX /></button>
                 </div>
 
                 {/* Nav */}
@@ -502,7 +615,10 @@ export default function Dashboard() {
                     {navItems.map(({ tab, label, icon, path }) => (
                         <button
                             key={label}
-                            onClick={() => path ? navigate(path) : setActiveTab(tab)}
+                            onClick={() => {
+                                if (path) navigate(path);
+                                else { setActiveTab(tab); setIsMobileMenuOpen(false); }
+                            }}
                             className={`nav-btn ${!path && activeTab === tab ? 'active' : 'inactive'}`}
                             title={isSidebarCollapsed ? label : ''}
                             style={{ justifyContent: isSidebarCollapsed ? 'center' : 'flex-start' }}
@@ -539,13 +655,12 @@ export default function Dashboard() {
             </aside>
 
             {/* ── MAIN CONTENT ── */}
-            <main style={{ flex: 1, overflowY: 'auto', padding: '36px 40px' }}>
+            <main className="main-content">
                 {/* Page Header */}
-                <div style={{ marginBottom: 32 }}>
+                <div className="header-flex">
                     <h1 style={{ fontSize: 26, fontWeight: 800, color: '#F1F5F9' }}>
                         {activeTab === 'overview' && t('dashboard')}
-                        {activeTab === 'courses' && t('my_assigned_courses')}
-                        {activeTab === 'catalog' && 'Course Catalog'}
+                        {activeTab === 'course_hub' && 'Learning Hub'}
                         {activeTab === 'profile' && 'My Profile'}
                         {activeTab === 'attendance' && t('attendance')}
                     </h1>
@@ -555,7 +670,7 @@ export default function Dashboard() {
                 {activeTab === 'overview' && (
                     <div className="fade-in">
                         {/* 4 Smaller Summary Cards */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20, marginBottom: 36 }}>
+                        <div className="stat-grid-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20, marginBottom: 36 }}>
                             <div className="stat-card">
                                 <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 8 }}>Total Courses</div>
                                 <div style={{ fontSize: 24, fontWeight: 900 }}>{data?.enrollments.length}</div>
@@ -566,10 +681,13 @@ export default function Dashboard() {
                                 <div style={{ fontSize: 24, fontWeight: 900, color: getAttendanceColor(avgAttendance) }}>{Math.round(avgAttendance)}%</div>
                                 <div style={{ position: 'absolute', top: 15, right: 15, opacity: 0.2 }}><IconCalendar /></div>
                             </div>
-                            <div className="stat-card">
-                                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 8 }}>Global Progress</div>
+                            <div className="stat-card" onClick={() => navigate("/xp-badges")} style={{ cursor: 'pointer' }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 8 }}>Next Milestone</div>
                                 <div style={{ fontSize: 24, fontWeight: 900, color: '#F59E0B' }}>
-                                    {Math.round((data?.enrollments || []).reduce((acc, curr) => acc + (curr.attendance?.percentage || 0), 0) / (data?.enrollments.length || 1))}%
+                                    {data?.stats.next_tier_name !== "Max Tier" ? data?.stats.next_tier_name : "Max Tier"}
+                                </div>
+                                <div style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
+                                    {data?.stats.next_tier_name !== "Max Tier" ? `${data?.stats.xp_to_next_tier} XP TO GO` : "TOP RANK ACHIEVED"}
                                 </div>
                                 <div style={{ position: 'absolute', top: 15, right: 15, opacity: 0.2 }}><IconStar /></div>
                             </div>
@@ -580,7 +698,31 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, marginBottom: 36 }}>
+                        {/* Tier Progress Bar */}
+                        <div style={{ background: '#1A1F2E', borderRadius: 20, padding: '24px 32px', marginBottom: 36, border: '1px solid #2D3748', position: 'relative', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
+                                <div>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Ranking Progression</div>
+                                    <h3 style={{ fontSize: 20, fontWeight: 900, color: '#F8FAFC' }}>Path to {data?.stats.next_tier_name}</h3>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 24, fontWeight: 900, color: '#F8FAFC' }}>{data?.stats.xp} <span style={{ fontSize: 12, color: '#64748B' }}>TOTAL XP</span></div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B' }}>{data?.stats.next_tier_name !== "Max Tier" ? `${data?.stats.xp_to_next_tier} XP to reach next tier` : "Ultimate Rank Reached"}</div>
+                                </div>
+                            </div>
+                            <div style={{ height: 12, background: '#0F172A', borderRadius: 10, overflow: 'hidden', padding: 2, border: '1px solid #334155' }}>
+                                <div style={{ 
+                                    width: `${data?.stats.progress_percentage || 0}%`, 
+                                    height: '100%', 
+                                    background: 'linear-gradient(90deg, #F59E0B, #FBBF24)', 
+                                    borderRadius: 10,
+                                    boxShadow: '0 0 15px rgba(245, 158, 11, 0.4)',
+                                    transition: 'width 1.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                                }}></div>
+                            </div>
+                        </div>
+
+                        <div className="overview-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, marginBottom: 36 }}>
                             {/* Improved Attendance Circle */}
                             <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                 <div style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 20 }}>Attendance Health</div>
@@ -677,6 +819,38 @@ export default function Dashboard() {
                             </div>
                         </div>
 
+                        {/* 📚 My Learning Hub Preview */}
+                        <div style={{ marginBottom: 36 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                                <h2 style={{ fontSize: 18, fontWeight: 900, color: '#F1F5F9', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span style={{ fontSize: 24 }}>📚</span> My Learning Hub
+                                </h2>
+                                <button onClick={() => setActiveTab("course_hub")} style={{ color: '#F59E0B', background: 'none', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>View All Hub →</button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
+                                {data?.enrollments.slice(0, 3).map(enr => (
+                                    <div key={enr.id} className="card" style={{ padding: 20, background: 'rgba(25, 31, 46, 0.8)', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                                        <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, color: '#F8FAFC' }}>{enr.course.course_name}</h3>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+                                            <span style={{ color: '#64748B', fontWeight: 700 }}>PROGRESS</span>
+                                            <span style={{ color: '#F59E0B', fontWeight: 800 }}>{Math.round(enr.manual_progress)}%</span>
+                                        </div>
+                                        <div className="progress-bar" style={{ height: 8 }}>
+                                            <div className="progress-fill" style={{ width: `${enr.manual_progress}%`, background: '#F59E0B' }}></div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {availableCourses.length > 0 && (
+                                    <div onClick={() => setActiveTab("course_hub")} style={{ cursor: 'pointer', padding: 20, background: 'linear-gradient(135deg, rgba(245,158,11,0.05) 0%, transparent 100%)', border: '1px dashed rgba(245,158,11,0.3)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                                        <div style={{ fontSize: 24, marginBottom: 8 }}>✨</div>
+                                        <div style={{ fontSize: 13, fontWeight: 800, color: '#F59E0B' }}>Explore Catalog</div>
+                                        <div style={{ fontSize: 10, color: '#64748B' }}>{availableCourses.length} more courses available</div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {/* 🎯 Daily Missions Section */}
                         <div style={{ marginBottom: 36 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -691,7 +865,7 @@ export default function Dashboard() {
                                     <div style={{ width: 24, height: 24, borderRadius: '50%', border: '3px solid #F59E0B22', borderTopColor: '#F59E0B', animation: 'spin 0.8s linear infinite' }}></div>
                                 </div>
                             ) : challenges.length > 0 ? (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                                     {challenges.map(ch => {
                                         const sub = ch.user_submission;
                                         return (
@@ -787,7 +961,7 @@ export default function Dashboard() {
                             </div>
                             <div style={{ padding: '52px 28px 28px' }}>
                                 <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 28 }}>{data?.student.username}</h2>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                                     <div style={{ background: '#242938', border: '1px solid #2D3748', borderRadius: 8, padding: '14px 18px' }}>
                                         <p style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>Full Name</p>
                                         <p style={{ fontSize: 14, color: '#F1F5F9' }}>{data?.student.full_name || 'Not provided'}</p>
@@ -822,92 +996,120 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* Rest of the tabs (Courses, Catalog, Attendance) restored properly... */}
-                {activeTab === 'courses' && (
-                    <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 24 }}>
-                        {data?.enrollments.map(enr => {
-                            const pct = enr.manual_progress;
-                            const clr = pct >= 80 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
-                            const isCompleted = pct === 100;
-
-                            return (
-                                <div key={enr.id} className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.3s ease' }}>
-                                    <div style={{ height: 160, background: '#242938', position: 'relative' }}>
-                                        {enr.course.course_image ? (
-                                            <img src={getImageUrl(enr.course.course_image)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        ) : (
-                                            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, fontWeight: 800, color: '#F59E0B' }}>{enr.course.course_name[0]}</div>
-                                        )}
-                                        <div style={{ position: 'absolute', top: 12, right: 12 }}>
-                                            <span className="badge" style={{
-                                                background: isCompleted ? '#10B981BB' : '#3B82F6BB',
-                                                color: '#FFF',
-                                                backdropFilter: 'blur(10px)'
-                                            }}>
-                                                {isCompleted ? 'Completed' : 'In Progress'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ padding: 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#F1F5F9', marginBottom: 12 }}>{enr.course.course_name}</h3>
-
-                                        <div style={{ marginBottom: 20 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Course Progress</span>
-                                                <span style={{ fontSize: 12, fontWeight: 800, color: clr }}>{Math.round(pct)}%</span>
-                                            </div>
-                                            <div className="progress-bar">
-                                                <div className="progress-fill" style={{ width: `${pct}%`, background: clr }}></div>
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                                            <div style={{ background: '#0F172A', padding: '10px 12px', borderRadius: 8, border: '1px solid #1E293B' }}>
-                                                <div style={{ fontSize: 9, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 2 }}>Attendance</div>
-                                                <div style={{ fontSize: 13, fontWeight: 700, color: getAttendanceColor(enr.attendance?.attendance_percentage || 0) }}>{Math.round(enr.attendance?.attendance_percentage || 0)}%</div>
-                                            </div>
-                                            <div style={{ background: '#0F172A', padding: '10px 12px', borderRadius: 8, border: '1px solid #1E293B' }}>
-                                                <div style={{ fontSize: 9, fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginBottom: 2 }}>Next Class</div>
-                                                <div style={{ fontSize: 12, fontWeight: 700, color: '#F1F5F9' }}>Tue, 24 Feb</div>
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-
-                {activeTab === 'catalog' && (
-                    <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
-                        {availableCourses.length > 0 ? (
-                            availableCourses.map(c => (
-                                <div key={c.id} className="card" style={{ overflow: 'hidden' }}>
-                                    <div style={{ height: 160, background: '#242938' }}>
-                                        {c.course_image && <img src={getImageUrl(c.course_image)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                                    </div>
-                                    <div style={{ padding: 20 }}>
-                                        <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{c.course_name}</h3>
-                                        <p style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>{c.course_description}</p>
-                                        <button onClick={() => handleEnroll(c.id, c.course_name)} className="btn-gold" style={{ width: '100%', padding: '10px 0' }}>Enroll Now</button>
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            <div style={{ gridColumn: '1 / -1', padding: '60px 0', textAlign: 'center', background: '#1A1F2E', borderRadius: 20, border: '1px dashed #2D3748' }}>
-                                <div style={{ fontSize: 48, marginBottom: 20 }}>🎓</div>
-                                <h3 style={{ fontSize: 20, fontWeight: 800, color: '#F1F5F9', marginBottom: 8 }}>No Courses Available</h3>
-                                <p style={{ color: '#64748B', maxWidth: 400, margin: '0 auto' }}>Check back soon! We're currently preparing new exciting courses for you.</p>
+                {activeTab === 'course_hub' && (
+                    <div className="fade-in">
+                        {/* Section: My Enrolled Courses */}
+                        <div style={{ marginBottom: 48 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#F1F5F9', borderLeft: '4px solid #F59E0B', paddingLeft: 12 }}>My Enrolled Courses</h2>
+                                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>{data?.enrollments.length || 0} active courses</span>
                             </div>
-                        )}
+                            
+                            {data?.enrollments.length === 0 ? (
+                                <div style={{ padding: '60px 0', textAlign: 'center', background: '#1A1F2E', borderRadius: 20, border: '1px dashed #2D3748' }}>
+                                    <h3 style={{ fontSize: 18, color: '#64748B' }}>You haven't enrolled in any courses yet.</h3>
+                                </div>
+                            ) : (
+                                <div className="course-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+                                    {data?.enrollments.map(enr => {
+                                        const pct = enr.manual_progress;
+                                        const clr = pct >= 80 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
+                                        const isCompleted = pct === 100;
+
+                                        return (
+                                            <div key={enr.id} className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all 0.3s ease' }}>
+                                                <div style={{ height: 160, background: '#242938', position: 'relative' }}>
+                                                    {enr.course.course_image ? (
+                                                        <img src={getImageUrl(enr.course.course_image)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, fontWeight: 800, color: '#F59E0B' }}>{enr.course.course_name[0]}</div>
+                                                    )}
+                                                    <div style={{ position: 'absolute', top: 12, right: 12 }}>
+                                                        <span className="badge" style={{ background: isCompleted ? '#10B981BB' : '#3B82F6BB', color: '#FFF', backdropFilter: 'blur(10px)' }}>
+                                                            {isCompleted ? 'Completed' : 'In Progress'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ padding: 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                                    <h3 style={{ fontSize: 17, fontWeight: 800, color: '#F1F5F9', marginBottom: 12 }}>{enr.course.course_name}</h3>
+                                                    <div style={{ marginBottom: 20 }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Progress</span>
+                                                            <span style={{ fontSize: 12, fontWeight: 800, color: clr }}>{Math.round(pct)}%</span>
+                                                        </div>
+                                                        <div className="progress-bar">
+                                                            <div className="progress-fill" style={{ width: `${pct}%`, background: clr }}></div>
+                                                        </div>
+                                                    </div>
+                                                    {/* Removed Attendance and Rank as requested */}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Section: Explore Course Catalog */}
+                        <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#F1F5F9', borderLeft: '4px solid #F59E0B', paddingLeft: 12 }}>Explore Course Catalog</h2>
+                                <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>{availableCourses.length} new opportunities</span>
+                            </div>
+
+                            <div className="catalog-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+                                {availableCourses.length > 0 ? (
+                                    availableCourses.map(c => (
+                                        <div key={c.id} className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ height: 160, background: '#242938' }}>
+                                                {c.course_image && <img src={getImageUrl(c.course_image)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                                            </div>
+                                            <div style={{ padding: 20 }}>
+                                                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: '#F1F5F9' }}>{c.course_name}</h3>
+                                                <p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 16, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                    {c.course_description}
+                                                </p>
+                                                <button onClick={() => handleEnroll(c.id, c.course_name)} className="btn-gold" style={{ width: '100%', padding: '12px 0' }}>Enrol Now</button>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div style={{ gridColumn: '1 / -1', padding: '60px 0', textAlign: 'center', background: '#1A1F2E', borderRadius: 20, border: '1px dashed #2D3748' }}>
+                                        <div style={{ fontSize: 40, marginBottom: 16 }}>🎓</div>
+                                        <h3 style={{ fontSize: 18, color: '#64748B' }}>You've unlocked all our current courses!</h3>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'attendance' && (
                     <div className="fade-in">
-                        <div style={{ display: 'flex', gap: 16, marginBottom: 24, justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 16, marginBottom: 24, justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                <button 
+                                    className="btn-gold" 
+                                    style={{ padding: '6px 14px', fontSize: 12 }}
+                                    onClick={async () => {
+                                        try {
+                                            const response = await api.get('/api/lms/attendance/export/me/', { responseType: 'blob' });
+                                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.setAttribute('download', `Full_Attendance_Report.csv`);
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            link.remove();
+                                        } catch (err) { showToast("Failed to download report", "error"); }
+                                    }}
+                                >
+                                    📄 Download Full Report
+                                </button>
+
+                            </div>
+
                             <div style={{ background: '#111827', padding: 4, borderRadius: 10, display: 'flex', border: '1px solid #1E293B' }}>
                                 <button
                                     onClick={() => setViewMode('list')}
@@ -930,13 +1132,16 @@ export default function Dashboard() {
                             ) : (
                                 <>
                                     {viewMode === 'list' ? (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+                                        <div className="attendance-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                                             {attendanceLogs.map(log => (
                                                 <div key={log.id} className="card" style={{ padding: 18, borderLeft: `4px solid ${log.status === 'present' ? '#10B981' : '#F87171'}` }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                                                         <div>
                                                             <div style={{ fontSize: 13, fontWeight: 800, color: '#F1F5F9' }}>{new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                                                            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>{log.day}</div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                                <div style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{log.course_name}</div>
+                                                                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>{log.day}</div>
+                                                            </div>
                                                         </div>
                                                         <span className="badge" style={{
                                                             background: log.status === 'present' ? '#10B98122' : '#F8717122',

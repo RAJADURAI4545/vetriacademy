@@ -7,6 +7,7 @@ urlpatterns = [
     path('dashboard/', views.StudentDashboardView.as_view(), name='dashboard'),
     path('all-students/', views.StaffStudentListView.as_view(), name='all-students'),
     path('attendance/export/<int:enrollment_id>/', views.ExportAttendanceView.as_view(), name='export-attendance'),
+    path('attendance/export/me/', views.ExportUserDailyAttendanceView.as_view(), name='export-my-attendance'),
     path('attendance/logs/', views.AttendanceLogListView.as_view(), name='attendance-logs'),
     path('attendance/logs/<int:student_id>/', views.AttendanceLogListView.as_view(), name='student-attendance-logs'),
     path('attendance/mark/', views.MarkAttendanceView.as_view(), name='mark-attendance'),
@@ -26,6 +27,8 @@ urlpatterns = [
     path('teacher/update-progress/', views.TeacherUpdateProgressView.as_view(), name='teacher-update-progress'),
     path('teacher/update-course-progress/', views.TeacherUpdateCourseProgressView.as_view(), name='teacher-update-course-progress'),
     path('teacher/students/<int:enrollment_id>/performance/', views.TeacherStudentPerformanceView.as_view(), name='teacher-student-performance'),
+    path('teacher/competitions/attempts/', views.TeacherCompetitionAttemptsView.as_view(), name='teacher-competition-attempts'),
+    # Bulk course export removed as per user request
 
     # Daily Challenge Endpoints
     path('daily-challenges/', views.DailyChallengeListView.as_view(), name='daily-challenge-list'),
@@ -34,4 +37,5 @@ urlpatterns = [
     path('teacher/challenges/feedback/', views.TeacherFeedbackChallengeView.as_view(), name='teacher-challenge-feedback'),
     path('teacher/daily-challenges/create/', views.DailyChallengeCreateView.as_view(), name='teacher-challenge-create'),
     path('teacher/daily-challenges/list/', views.TeacherChallengeListView.as_view(), name='teacher-challenge-assigned-list'),
+    path('leaderboard/course/', views.CourseLeaderboardView.as_view(), name='course-leaderboard'),
 ]

@@ -10,18 +10,30 @@ function Login() {
 
         try {
             const response = await axios.post(
-                "http://127.0.0.1:8000/api/auth/login/",
+                "http://127.0.0.1:8000/api/accounts/login/",
                 {
-                    email: email,
+                    email: email, // This specific backend (using email as USERNAME_FIELD) expects 'email' key
                     password: password,
                 }
             );
 
-            console.log(response.data);
-            alert("Login Successful!");
+            console.log("Login Success:", response.data);
+            localStorage.setItem("token", response.data.access);
+            localStorage.setItem("refresh", response.data.refresh);
+            window.location.href = "/dashboard";
         } catch (error) {
-            console.error(error);
-            alert("Login Failed!");
+            console.error("Login Error:", error);
+            const errorData = error.response?.data;
+            let errorMsg = "Login Failed!";
+            
+            if (errorData) {
+                if (typeof errorData === 'string') errorMsg = errorData;
+                else if (errorData.detail) errorMsg = errorData.detail;
+                else if (errorData.email) errorMsg = `Email: ${errorData.email[0]}`;
+                else if (errorData.password) errorMsg = `Password: ${errorData.password[0]}`;
+            }
+            
+            alert(errorMsg);
         }
     };
 

@@ -1,0 +1,16 @@
+Method,Name,Error,Occurrences
+POST,/api/accounts/register/,HTTPError('429 Client Error: Too Many Requests for url: /api/accounts/register/'),35
+GET,/api/accounts/profile/,HTTPError('401 Client Error: Unauthorized for url: /api/accounts/profile/'),64
+GET,/api/lms/gamification/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/gamification/'),168
+GET,/api/lms/dashboard/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/dashboard/'),338
+GET,/api/lms/all-students/,HTTPError('429 Client Error: Too Many Requests for url: /api/lms/all-students/'),27
+GET,/api/lms/dashboard/ [admin],HTTPError('429 Client Error: Too Many Requests for url: /api/lms/dashboard/ [admin]'),50
+POST,/api/accounts/login/ [admin],HTTPError('429 Client Error: Too Many Requests for url: /api/accounts/login/ [admin]'),35
+GET,/api/lms/attendance/all-logs/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/attendance/all-logs/'),110
+GET,/api/lms/daily-challenges/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/daily-challenges/'),97
+GET,/api/lms/dashboard/ [admin],HTTPError('401 Client Error: Unauthorized for url: /api/lms/dashboard/ [admin]'),259
+GET,/api/lms/attendance/all-logs/,HTTPError('429 Client Error: Too Many Requests for url: /api/lms/attendance/all-logs/'),17
+GET,/api/lms/all-students/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/all-students/'),163
+GET,/api/lms/attendance/logs/,HTTPError('401 Client Error: Unauthorized for url: /api/lms/attendance/logs/'),116
+POST,/api/accounts/login/,HTTPError('429 Client Error: Too Many Requests for url: /api/accounts/login/'),47
+GET,/api/lms/courses/,HTTPError('429 Client Error: Too Many Requests for url: /api/lms/courses/'),288

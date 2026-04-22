@@ -17,10 +17,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ('email', 'username', 'password', 'full_name', 'parent_name', 'dob', 'address', 'school_name', 'standard_grade')
 
     def create(self, validated_data):
+        # Automatically set is_teacher for specific gmails
+        teacher_emails = ['Vakpython@gmail.com', 'Vakspoken@gmail.com', 'Vakcse@gmail.com']
+        is_teacher = validated_data['email'] in teacher_emails
+
         user = User.objects.create_user(
             email=validated_data['email'],
             username=validated_data['username'],
             password=validated_data['password'],
+            is_teacher=is_teacher,
             full_name=validated_data.get('full_name', ''),
             parent_name=validated_data.get('parent_name', ''),
             dob=validated_data.get('dob'),
@@ -29,6 +34,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             standard_grade=validated_data.get('standard_grade', '')
         )
         return user
+
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):

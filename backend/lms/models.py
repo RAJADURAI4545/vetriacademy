@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from django.core.cache import cache
+from django.db.models import Count, Q
 
 class Course(models.Model):
     course_name = models.CharField(max_length=255)
@@ -58,38 +60,64 @@ class Grade(models.Model):
 
 class Attendance(models.Model):
     enrollment = models.OneToOneField(Enrollment, on_delete=models.CASCADE, related_name='attendance')
-    
+
+    def _get_cached_stats(self):
+        """Single query + cache for all attendance stats. Avoids 3 separate COUNT queries."""
+        student_id = self.enrollment.student_id
+        course_id = self.enrollment.course_id
+        cache_key = f'attendance_stats_{student_id}_{course_id}'
+        stats = cache.get(cache_key)
+        if stats is None:
+            result = DailyAttendanceLog.objects.filter(
+                student_id=student_id,
+                course_id=course_id
+            ).aggregate(
+                total=Count('id'),
+                present=Count('id', filter=Q(status='present')),
+            )
+            last_log = DailyAttendanceLog.objects.filter(
+                student_id=student_id,
+                course_id=course_id
+            ).order_by('-date').values_list('date', flat=True).first()
+            stats = {
+                'total': result['total'] or 0,
+                'present': result['present'] or 0,
+                'last_date': last_log,
+            }
+            cache.set(cache_key, stats, 120)  # Cache for 2 minutes
+        return stats
+
     @property
     def last_log_date(self):
-        last_log = DailyAttendanceLog.objects.filter(student=self.enrollment.student).order_by('-date').first()
-        return last_log.date if last_log else None
+        return self._get_cached_stats()['last_date']
 
     @property
     def total_classes(self):
-        # Full day attendance logs for this student
-        return DailyAttendanceLog.objects.filter(student=self.enrollment.student).count()
+        return self._get_cached_stats()['total']
 
     @property
     def attended_classes(self):
-        return DailyAttendanceLog.objects.filter(student=self.enrollment.student, status='present').count()
+        return self._get_cached_stats()['present']
 
     @property
     def attendance_percentage(self):
-        total = self.total_classes
-        if total == 0:
+        stats = self._get_cached_stats()
+        if stats['total'] == 0:
             return 0
-        return (self.attended_classes / total) * 100
+        return (stats['present'] / stats['total']) * 100
 
     def __str__(self):
-        return f"Attendance Summary for {self.enrollment}: {self.attended_classes}/{self.total_classes}"
+        stats = self._get_cached_stats()
+        return f"Attendance Summary for {self.enrollment}: {stats['present']}/{stats['total']}"
 
 class DailyAttendanceLog(models.Model):
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_attendance_logs')
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='daily_attendance_logs', null=True, blank=True)
     date = models.DateField()
-    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent')], default='present')
+    status = models.CharField(max_length=10, choices=[('present', 'Present'), ('absent', 'Absent')], default='present', db_index=True)
 
     class Meta:
-        unique_together = ('student', 'date')
+        unique_together = ('student', 'course', 'date')
         ordering = ['-date']
 
     def __str__(self):
@@ -142,6 +170,7 @@ class Competition(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField()
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='internal')
+    course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True, related_name='competitions')
     mode_type = models.CharField(max_length=20, choices=MODE_CHOICES, default='quiz')
     external_link = models.URLField(max_length=500, blank=True, null=True)
     time_limit = models.IntegerField(default=15, help_text="Time limit in minutes")

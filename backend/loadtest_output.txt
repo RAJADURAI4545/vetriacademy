@@ -1,0 +1,39 @@
+﻿.\venv\Scripts\locust.exe
+ : [2026-04-10 
+21:39:29,746] 
+sparky/INFO/locust.main: 
+Starting Locust 2.43.4
+At line:1 char:1
++ .\venv\Scripts\locust.e
+xe -f locustfile.py --hos
+t=http://127.0.0.1:80 ...
++ ~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo       
+       : NotSpecified:   
+  ([2026-04-10 21:...g   
+  Locust 2.43.4:Strin    
+g) [], RemoteExcepti    
+on
+    + FullyQualifiedErro 
+   rId : NativeCommandE  
+  rror
+ 
+[2026-04-10 
+21:39:29,746] 
+sparky/INFO/locust.main: 
+Run time limit set to 60 
+seconds
+[2026-04-10 
+21:39:29,748] sparky/INFO
+/locust.runners: Ramping 
+to 100 users at a rate 
+of 10.00 per second
+[2026-04-10 
+21:39:38,815] sparky/INFO
+/locust.runners: All 
+users spawned: 
+{"AdminUser": 50, 
+"VetriAcademyUser": 50} 
+(100 total users)

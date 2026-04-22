@@ -62,11 +62,15 @@ class AttendanceLogEnrollmentSerializer(serializers.ModelSerializer):
 
 class DailyAttendanceLogSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.username', read_only=True)
+    course_name = serializers.SerializerMethodField()
     day = serializers.SerializerMethodField()
 
     class Meta:
         model = DailyAttendanceLog
-        fields = ('id', 'student', 'student_name', 'date', 'day', 'status')
+        fields = ('id', 'student', 'student_name', 'course', 'course_name', 'date', 'day', 'status')
+
+    def get_course_name(self, obj):
+        return obj.course.course_name if obj.course else "General / Academy"
 
     def get_day(self, obj):
         return obj.date.strftime('%A')
@@ -86,10 +90,12 @@ class CompetitionSerializer(serializers.ModelSerializer):
     reward_badge = BadgeSerializer(read_only=True)
     participant_count = serializers.IntegerField(source='participants.count', read_only=True)
     is_joined = serializers.SerializerMethodField()
+    is_completed = serializers.SerializerMethodField()
 
+    course_name = serializers.CharField(source='course.course_name', read_only=True)
     class Meta:
         model = Competition
-        fields = ('id', 'title', 'description', 'category', 'mode_type', 'external_link', 'time_limit', 'start_date', 'end_date', 'reward_xp', 'reward_badge', 'participant_count', 'is_joined')
+        fields = ('id', 'title', 'description', 'category', 'course', 'course_name', 'mode_type', 'external_link', 'time_limit', 'start_date', 'end_date', 'reward_xp', 'reward_badge', 'participant_count', 'is_joined', 'is_completed')
 
     def get_is_joined(self, obj):
         request = self.context.get('request')
@@ -97,13 +103,26 @@ class CompetitionSerializer(serializers.ModelSerializer):
             return obj.participants.filter(user=request.user).exists()
         return False
 
+    def get_is_completed(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.competitionattempt_set.filter(user=request.user, is_completed=True).exists()
+        return False
+
 class LeaderboardSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     profile_picture = serializers.ImageField(source='user.profile_picture', read_only=True)
-    
+
     class Meta:
         model = CompetitionParticipant
         fields = ('username', 'profile_picture', 'score', 'joined_at')
+
+class CourseLeaderboardSerializer(serializers.Serializer):
+    student_id = serializers.IntegerField()
+    username = serializers.CharField()
+    profile_picture = serializers.ImageField(allow_null=True)
+    course_xp = serializers.IntegerField()
+    rank = serializers.IntegerField()
 
 class CompetitionParticipantSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
@@ -139,9 +158,13 @@ class MemorySetSerializer(serializers.ModelSerializer):
         fields = ('id', 'words_list', 'questions')
 
 class CompetitionAttemptSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    competition_title = serializers.CharField(source='competition.title', read_only=True)
+    mode = serializers.CharField(source='competition.mode_type', read_only=True)
+    
     class Meta:
         model = CompetitionAttempt
-        fields = '__all__'
+        fields = ('id', 'username', 'competition_title', 'mode', 'score', 'correct_answers', 'total_questions', 'start_time', 'is_completed')
 
 class TeacherCourseAssignmentSerializer(serializers.ModelSerializer):
     course_name = serializers.CharField(source='course.course_name', read_only=True)
@@ -196,7 +219,9 @@ class TeacherStudentSerializer(serializers.ModelSerializer):
         date_str = self.context.get('request').query_params.get('date') if self.context.get('request') else None
         if not date_str:
             return None
-        from .models import AttendanceLog
+        from .models import DailyAttendanceLog
+        log = DailyAttendanceLog.objects.filter(student=obj.student, course=obj.course, date=date_str).first()
+        return log.status if log else None
 
 class DailyChallengeQuestionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -213,19 +238,26 @@ class DailyChallengeSerializer(serializers.ModelSerializer):
                   'allow_audio', 'allow_text', 'allow_file', 'reward_xp', 'created_at', 'quiz_questions')
 
     def create(self, validated_data):
-        quiz_questions_data = validated_data.pop('quiz_questions', [])
-        challenge = DailyChallenge.objects.create(**validated_data)
-        for question_data in quiz_questions_data:
-            # Defensive: remove id if present
-            question_data.pop('id', None)
-            DailyChallengeQuestion.objects.create(challenge=challenge, **question_data)
-        return challenge
+        try:
+            quiz_questions_data = validated_data.pop('quiz_questions', [])
+            if quiz_questions_data is None:
+                quiz_questions_data = []
+
+            challenge = DailyChallenge.objects.create(**validated_data)
+            for question_data in quiz_questions_data:
+                # Defensive: remove id if present
+                question_data.pop('id', None)
+                DailyChallengeQuestion.objects.create(challenge=challenge, **question_data)
+            return challenge
+        except Exception as e:
+            raise ValidationError({"detail": f"Failed to create challenge: {str(e)}"})
 
 class ChallengeSubmissionSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.username', read_only=True)
     challenge_mission = serializers.CharField(source='challenge.mission', read_only=True)
     challenge_type = serializers.CharField(source='challenge.challenge_type', read_only=True)
     submission_date = serializers.DateTimeField(source='submitted_at', read_only=True)
+    course_name = serializers.CharField(source='challenge.course.course_name', read_only=True)
     
     class Meta:
         model = ChallengeSubmission

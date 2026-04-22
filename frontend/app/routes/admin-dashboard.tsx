@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import api from "../api";
 import { API_BASE_URL } from "../config";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import { useToast } from "../context/NotificationContext";
+import type { Route } from "./+types/admin-dashboard";
 
 interface Course {
     id: number;
@@ -34,13 +35,30 @@ export function meta() {
     return [{ title: "Admin Dashboard | AntiGravity LMS" }];
 }
 
+export async function clientLoader() {
+    try {
+        const [enrollRes, courseRes] = await Promise.all([
+            api.get("/api/lms/all-students/"),
+            api.get("/api/lms/courses/")
+        ]);
+        return {
+            initialEnrollments: enrollRes.data as Enrollment[],
+            initialCourses: courseRes.data as Course[]
+        };
+    } catch (err) {
+        console.error("Admin Dashboard loader error:", err);
+        return { initialEnrollments: [], initialCourses: [] };
+    }
+}
+
 export default function AdminDashboard() {
+    const loaderData = useLoaderData<typeof clientLoader>();
     const { showToast } = useToast();
-    const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-    const [courses, setCourses] = useState<Course[]>([]);
+    const [enrollments, setEnrollments] = useState<Enrollment[]>(loaderData.initialEnrollments);
+    const [courses, setCourses] = useState<Course[]>(loaderData.initialCourses);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCourseId, setSelectedCourseId] = useState<string>("all");
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const navigate = useNavigate();
 
@@ -57,13 +75,8 @@ export default function AdminDashboard() {
                 ? "/api/lms/all-students/"
                 : `/api/lms/all-students/?course_id=${selectedCourseId}`;
 
-            const [enrollRes, courseRes] = await Promise.all([
-                api.get(url),
-                api.get("/api/lms/courses/")
-            ]);
-
+            const enrollRes = await api.get(url);
             setEnrollments(enrollRes.data);
-            setCourses(courseRes.data);
         } catch (err: any) {
             console.error(err);
             if (err.response?.status === 401) {
@@ -78,7 +91,9 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        fetchData();
+        if (selectedCourseId !== "all") {
+            fetchData();
+        }
     }, [navigate, selectedCourseId]);
 
     const handleMarkAttendance = async () => {
@@ -174,7 +189,7 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-100">

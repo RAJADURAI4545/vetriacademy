@@ -42,22 +42,42 @@ export function meta() {
     return [{ title: "Teacher Dashboard | Vetri Academy" }];
 }
 
-type Tab = "overview" | "students" | "missions";
+type Tab = "overview" | "students" | "missions" | "competitions" | "leaderboard";
+
+interface CompetitionAttempt {
+    id: number;
+    username: string;
+    competition_title: string;
+    mode: string;
+    score: number;
+    correct_answers: number;
+    total_questions: number;
+    start_time: string;
+    is_completed: boolean;
+}
 
 interface ChallengeSubmission {
     id: number;
     student_name: string;
-    mission_text: string;
+    challenge_mission: string;
     text_response?: string;
     audio_response?: string;
     file_response?: string;
     status: 'pending' | 'approved' | 'correction';
     feedback?: string;
-    submitted_at: string;
-    reward_xp: number;
+    submission_date: string;
+    course_name: string;
     challenge_type: 'mission' | 'quiz';
     quiz_score?: number;
     total_quiz_questions?: number;
+}
+
+interface LeaderboardEntry {
+    student_id: number;
+    username: string;
+    profile_picture: string | null;
+    course_xp: number;
+    rank: number;
 }
 
 interface NewQuizQuestion {
@@ -80,7 +100,7 @@ export default function TeacherDashboard() {
     const [activeTab, setActiveTab] = useState<Tab>("overview");
 
     // Filters
-    const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+    const [selectedCourseId, setSelectedCourseId] = useState<string>("all");
     const [searchTerm, setSearchTerm] = useState("");
     const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
@@ -90,6 +110,16 @@ export default function TeacherDashboard() {
     const [reviewingId, setReviewingId] = useState<number | null>(null);
     const [feedbackText, setFeedbackText] = useState("");
     const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+    // Leaderboard state
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
+    // Competition Attempts state
+    const [compAttempts, setCompAttempts] = useState<CompetitionAttempt[]>([]);
+    const [compLoading, setCompLoading] = useState(false);
+    const [compSearchTerm, setCompSearchTerm] = useState("");
+    const [compModeFilter, setCompModeFilter] = useState("");
 
     // New Mission Creation state
     const [isCreatingMission, setIsCreatingMission] = useState(false);
@@ -150,12 +180,43 @@ export default function TeacherDashboard() {
     const fetchSubmissions = async () => {
         setSubmissionsLoading(true);
         try {
-            const resp = await api.get("/api/lms/teacher/challenges/submissions/");
+            const params = new URLSearchParams();
+            if (selectedCourseId) params.append('course_id', selectedCourseId);
+            const resp = await api.get(`/api/lms/teacher/challenges/submissions/?${params.toString()}`);
             setSubmissions(resp.data);
         } catch (err) {
             console.error(err);
         } finally {
             setSubmissionsLoading(false);
+        }
+    };
+
+    const fetchLeaderboard = async () => {
+        if (!selectedCourseId) {
+            setLeaderboard([]);
+            return;
+        }
+        setLeaderboardLoading(true);
+        try {
+            const resp = await api.get(`/api/lms/leaderboard/course/?course_id=${selectedCourseId}`);
+            setLeaderboard(resp.data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLeaderboardLoading(true); // Should be false, wait
+            setLeaderboardLoading(false);
+        }
+    };
+
+    const fetchCompAttempts = async () => {
+        setCompLoading(true);
+        try {
+            const resp = await api.get("/api/lms/teacher/competitions/attempts/");
+            setCompAttempts(resp.data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setCompLoading(false);
         }
     };
 
@@ -237,6 +298,10 @@ export default function TeacherDashboard() {
             fetchStudents();
         } else if (activeTab === "missions") {
             fetchSubmissions();
+        } else if (activeTab === "competitions") {
+            fetchCompAttempts();
+        } else if (activeTab === "leaderboard") {
+            fetchLeaderboard();
         }
     }, [selectedCourseId, activeTab, attendanceDate]);
 
@@ -251,6 +316,7 @@ export default function TeacherDashboard() {
 
             await api.post("/api/lms/teacher/attendance/mark/", {
                 date: attendanceDate,
+                course_id: selectedCourseId,
                 attendance: [{
                     student_id: student.student_details.id,
                     status: status
@@ -276,6 +342,7 @@ export default function TeacherDashboard() {
         try {
             await api.post("/api/lms/teacher/attendance/mark/", {
                 date: attendanceDate,
+                course_id: selectedCourseId,
                 attendance: attendanceData
             });
             showToast("All students marked present", "success");
@@ -345,6 +412,7 @@ export default function TeacherDashboard() {
 
             await api.post("/api/lms/teacher/attendance/mark/", {
                 date: attendanceDate,
+                course_id: selectedCourseId,
                 attendance: attendanceData
             });
 
@@ -355,6 +423,29 @@ export default function TeacherDashboard() {
             showToast(msg, "error");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDownloadFullAttendance = async () => {
+        if (!selectedCourseId) {
+            showToast("Please select a course first.", "error");
+            return;
+        }
+        try {
+            const courseName = summary?.assigned_courses.find(c => String(c.course) === selectedCourseId)?.course_name || "Course";
+            const response = await api.get(`/api/lms/teacher/attendance/export/${selectedCourseId}/`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Attendance_Report_${courseName}_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Download error:', error);
+            showToast("Failed to download attendance report", "error");
         }
     };
 
@@ -371,10 +462,19 @@ export default function TeacherDashboard() {
         );
     });
 
+    const filteredCompAttempts = compAttempts.filter(att => {
+        const q = compSearchTerm.toLowerCase();
+        const matchesSearch = att.username.toLowerCase().includes(q) || att.competition_title.toLowerCase().includes(q);
+        const matchesMode = compModeFilter === "" || att.mode === compModeFilter;
+        return matchesSearch && matchesMode;
+    });
+
     return (
-        <div style={{ minHeight: "100vh", background: "#0F1117", color: "#F1F5F9", fontFamily: '"Inter", sans-serif' }}>
+        <div className="dashboard-container">
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+                body { line-height: 1.5; -webkit-font-smoothing: antialiased; }
+                h1, h2, h3, h4, h5, h6 { line-height: 1.2; letter-spacing: -0.01em; }
                 .sidebar { width: 260px; background: linear-gradient(180deg, #111827 0%, #0F172A 100%); border-right: 1px solid #1E293B; padding: 32px 0; display: flex; flex-direction: column; backdrop-filter: blur(20px); }
                 .nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 24px; color: #94A3B8; text-decoration: none; font-weight: 500; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; border-left: 4px solid transparent; }
                 .nav-link:hover { background: rgba(255,255,255,0.03); color: #F1F5F9; transform: translateX(4px); }
@@ -391,20 +491,56 @@ export default function TeacherDashboard() {
                 .attendance-btn { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid #2D3748; background: #131825; color: #64748B; transition: all 0.2s; }
                 .attendance-btn.present-active { background: #10B98120; color: #10B981; border-color: #10B98140; }
                 .attendance-btn.absent-active { background: #EF444420; color: #EF4444; border-color: #EF444440; }
-                .lang-switch { position: fixed; top: 20px; right: 20px; background: #111827; border: 1px solid #2D3748; color: #F59E0B; padding: 8px 16px; border-radius: 99px; font-weight: 700; font-size: 13px; cursor: pointer; z-index: 100; transition: all 0.2s; }
-                .lang-switch:hover { background: #F59E0B1A; border-color: #F59E0B; }
+                .lang-switch { position: fixed; top: 24px; right: 24px; background: #111827; border: 1px solid #2D3748; color: #F59E0B; padding: 12px 28px; border-radius: 99px; font-weight: 700; font-size: 14px; cursor: pointer; z-index: 100; transition: all 0.2s; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border: 2px solid #F59E0B33; }
+                .lang-switch:hover { background: #F59E0B; color: #0F1117; border-color: #F59E0B; transform: translateY(-2px); }
+                .lang-switch svg { width: 18px; height: 18px; }
+
+                /* Responsiveness Additions */
+                .dashboard-container { display: flex; height: 100vh; width: 100%; overflow: hidden; background: #0F1117; color: #F1F5F9; font-family: "Inter", sans-serif; }
+                .main-content { flex: 1; padding: 100px 48px 48px 64px; overflow-y: auto; width: 100%; box-sizing: border-box; background: #0F1117; }
+                .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+                .sidebar-logo { padding: 0 24px; margin-bottom: 40px; }
+                .nav-text { display: inline-block; }
+
+                @media (max-width: 1024px) {
+                    .sidebar { width: 80px; padding: 20px 0; }
+                    .nav-text, .sidebar-logo span { display: none; }
+                    .sidebar-logo { padding: 0; display: flex; justify-content: center; }
+                    .nav-link { justify-content: center; padding: 14px 0; border-left-width: 3px; }
+                }
+
+                @media (max-width: 768px) {
+                    .dashboard-container { flex-direction: column; }
+                    .sidebar { position: fixed; bottom: 0; left: 0; width: 100%; height: 64px; flex-direction: row; border-right: none; border-top: 1px solid #1E293B; z-index: 1000; padding: 0; justify-content: space-around; background: #0F172A; }
+                    .sidebar-logo { display: none; }
+                    .sidebar nav { flex-direction: row !important; gap: 0 !important; width: 100%; }
+                    .nav-link { flex-direction: column; height: 100%; flex: 1; padding: 8px 0; border-left: none; border-bottom: 3px solid transparent; gap: 4px; }
+                    .nav-link.active { border-left: none; border-bottom: 3px solid #F59E0B; background: transparent; }
+                    .nav-link svg { width: 20px; height: 20px; }
+                    .main-content { padding: 24px 20px 100px 20px; }
+                    .header-flex { flex-direction: column; align-items: flex-start !important; gap: 20px; }
+                    .stats-grid { grid-template-columns: 1fr !important; }
+                    .lang-switch { top: 12px; right: 12px; padding: 6px 12px; font-size: 11px; }
+                }
+
+                @media (max-width: 480px) {
+                    .card { padding: 16px; }
+                    .btn-gold { width: 100%; text-align: center; }
+                    .table-row td { padding: 12px 16px !important; }
+                }
             `}</style>
 
             <button className="lang-switch" onClick={toggleLanguage}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
                 {i18n.language === 'en' ? 'தமிழ்' : 'English'}
             </button>
 
-            <div style={{ display: "flex", minHeight: "100vh" }}>
+            <div className="dashboard-container">
                 <aside className="sidebar">
-                    <div style={{ padding: '0 24px', marginBottom: 40 }}>
+                    <div className="sidebar-logo">
                         <div style={{ fontSize: 24, fontWeight: 900, color: '#F59E0B', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: 10 }}>
                             <div style={{ width: 36, height: 36, background: 'linear-gradient(135deg, #F59E0B, #D97706)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F1117', fontSize: 20 }}>V</div>
-                            VETRI
+                            <span>VETRI</span>
                         </div>
                     </div>
 
@@ -414,21 +550,35 @@ export default function TeacherDashboard() {
                             onClick={() => setActiveTab("overview")}
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                            {t("dashboard")}
+                            <span className="nav-text">{t("dashboard")}</span>
                         </button>
                         <button
                             className={`nav-link ${activeTab === "students" ? "active" : ""}`}
                             onClick={() => setActiveTab("students")}
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                            {t("students")}
+                            <span className="nav-text">{t("students")}</span>
                         </button>
                         <button
                             className={`nav-link ${activeTab === "missions" ? "active" : ""}`}
                             onClick={() => setActiveTab("missions")}
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            Daily Missions
+                            <span className="nav-text">Daily Missions</span>
+                        </button>
+                        <button
+                            className={`nav-link ${activeTab === "competitions" ? "active" : ""}`}
+                            onClick={() => setActiveTab("competitions")}
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                            <span className="nav-text">Competition Results</span>
+                        </button>
+                        <button
+                            className={`nav-link ${activeTab === "leaderboard" ? "active" : ""}`}
+                            onClick={() => setActiveTab("leaderboard")}
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                            <span className="nav-text">Course Leaderboard</span>
                         </button>
                     </nav>
 
@@ -440,14 +590,16 @@ export default function TeacherDashboard() {
                     </div>
                 </aside>
 
-                <main style={{ flex: 1, padding: "40px 48px", overflowY: "auto" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32 }}>
+                <main className="main-content">
+                    <div className="header-flex">
                         <div>
                             <h1 style={{ fontSize: 28, fontWeight: 800, color: "#F1F5F9", marginBottom: 8 }}>
                                 {activeTab === 'missions' ? 'Review Daily Missions' : `${t("welcome")}, ${summary?.teacher_name || ""}`}
                             </h1>
-                            <p style={{ color: "#64748B", fontSize: 15 }}>
-                                {activeTab === 'missions' ? 'Review and provide feedback on student submissions.' : 'Manage your students and their progress.'}
+                             <p style={{ color: "#64748B", fontSize: 15 }}>
+                                {activeTab === 'missions' ? 'Review and provide feedback on student submissions.' : 
+                                 activeTab === 'leaderboard' ? 'View student rankings by course XP.' :
+                                 'Manage your students and their progress.'}
                             </p>
                         </div>
                         <div style={{ textAlign: "right" }}>
@@ -458,7 +610,7 @@ export default function TeacherDashboard() {
 
                     {activeTab === "overview" && (
                         <>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 32 }}>
+                            <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 32 }}>
                                 <div className="card" style={{ display: "flex", alignItems: "center", gap: 16 }}>
                                     <div style={{ width: 48, height: 48, borderRadius: 12, background: "#3B82F61A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>📚</div>
                                     <div>
@@ -568,6 +720,7 @@ export default function TeacherDashboard() {
                                                 <tr>
                                                     <th style={{ padding: "14px 24px", color: "#64748B" }}>{t("student")}</th>
                                                     <th style={{ padding: "14px 24px", color: "#64748B" }}>Progress</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Best Score</th>
                                                     <th style={{ padding: "14px 24px", color: "#64748B" }}>{t("attendance")}</th>
                                                     <th style={{ padding: "14px 24px", color: "#64748B" }}>{t("action")}</th>
                                                 </tr>
@@ -594,6 +747,12 @@ export default function TeacherDashboard() {
                                                                     style={{ flex: 1, accentColor: '#F59E0B' }}
                                                                 />
                                                                 <span style={{ fontSize: 13, fontWeight: 800, color: '#F1F5F9', minWidth: 40 }}>{s.manual_progress}%</span>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.best_competition_score >= 80 ? '#10B981' : s.best_competition_score >= 50 ? '#F59E0B' : '#EF4444' }}></div>
+                                                                <span style={{ fontWeight: 800, fontSize: 14 }}>{s.best_competition_score} XP</span>
                                                             </div>
                                                         </td>
                                                         <td style={{ padding: "18px 24px" }}>
@@ -657,34 +816,57 @@ export default function TeacherDashboard() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {submissions.filter(s => s.status === 'pending').map(s => (
+                                                {submissions.map(s => (
                                                     <tr key={s.id} className="table-row">
                                                         <td style={{ padding: "18px 24px" }}>
                                                             <div style={{ fontWeight: 700, color: '#F8FAFC' }}>{s.student_name}</div>
-                                                            <div style={{ fontSize: 12, color: "#A0AEC0", marginTop: 4 }}>Mission: {s.mission_text}</div>
+                                                            <div style={{ fontSize: 12, color: "#A0AEC0", marginTop: 4 }}>{s.course_name}</div>
+                                                            <div style={{ fontSize: 11, color: "#64748B", marginTop: 2 }}>Mission: {s.challenge_mission}</div>
                                                         </td>
                                                         <td style={{ padding: "18px 24px" }}>
-                                                            {s.text_response && <p style={{ fontSize: 13, background: '#242938', padding: 8, borderRadius: 6 }}>{s.text_response}</p>}
-                                                            {s.audio_response && (
-                                                                <div style={{ marginTop: 8 }}>
-                                                                    <audio controls src={s.audio_response} style={{ height: 32 }} />
+                                                            {s.challenge_type === 'quiz' ? (
+                                                                <div style={{ color: '#F59E0B', fontWeight: 700 }}>
+                                                                    Quiz Score: {s.quiz_score}/{s.total_quiz_questions}
                                                                 </div>
-                                                            )}
-                                                            {s.file_response && (
-                                                                <a href={s.file_response} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#F59E0B' }}>View Attached File</a>
+                                                            ) : (
+                                                                <>
+                                                                    {s.text_response && <p style={{ fontSize: 13, background: '#242938', padding: 8, borderRadius: 6, marginBottom: 4 }}>{s.text_response}</p>}
+                                                                    {s.audio_response && (
+                                                                        <div style={{ marginTop: 8 }}>
+                                                                            <audio controls src={s.audio_response} style={{ height: 32 }} />
+                                                                        </div>
+                                                                    )}
+                                                                    {s.file_response && (
+                                                                        <a href={s.file_response} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#F59E0B' }}>View Attached File</a>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </td>
                                                         <td style={{ padding: "18px 24px", fontSize: 13, color: '#64748B' }}>
-                                                            {new Date(s.submitted_at).toLocaleDateString()}
+                                                            {new Date(s.submission_date).toLocaleDateString()}
                                                         </td>
                                                         <td style={{ padding: "18px 24px" }}>
-                                                            <button
-                                                                onClick={() => setReviewingId(s.id)}
-                                                                className="btn-gold"
-                                                                style={{ padding: '6px 14px', fontSize: 12 }}
-                                                            >
-                                                                Review
-                                                            </button>
+                                                            {s.status === 'pending' ? (
+                                                                <button
+                                                                    onClick={() => setReviewingId(s.id)}
+                                                                    className="btn-gold"
+                                                                    style={{ padding: '6px 14px', fontSize: 12 }}
+                                                                >
+                                                                    Review
+                                                                </button>
+                                                            ) : (
+                                                                <span style={{ 
+                                                                    fontSize: 11, 
+                                                                    textTransform: 'uppercase', 
+                                                                    fontWeight: 800, 
+                                                                    padding: '4px 10px', 
+                                                                    borderRadius: 99, 
+                                                                    background: s.status === 'approved' ? '#10B98120' : '#EF444420',
+                                                                    color: s.status === 'approved' ? '#10B981' : '#EF4444'
+                                                                }}>
+                                                                    {s.status}
+                                                                </span>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -694,6 +876,162 @@ export default function TeacherDashboard() {
                                 )}
                             </div>
                         </>
+                    )}
+                    {activeTab === "competitions" && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                            <div className="card" style={{ padding: "20px 24px", display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 250px" }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Search Student or Challenge</label>
+                                    <input type="text" placeholder="Search..." className="input-dark" value={compSearchTerm} onChange={e => setCompSearchTerm(e.target.value)} />
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "0 1 200px" }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Game Mode</label>
+                                    <select className="input-dark" value={compModeFilter} onChange={e => setCompModeFilter(e.target.value)}>
+                                        <option value="">All Modes</option>
+                                        <option value="memory">Memory Mode</option>
+                                        <option value="quiz">Quiz Mode</option>
+                                        <option value="english">English Mode</option>
+                                        <option value="coding">Coding Mode</option>
+                                    </select>
+                                </div>
+                                <div style={{ flex: "0 0 auto", paddingTop: 18 }}>
+                                    <button className="btn-gold" onClick={fetchCompAttempts}>Refresh</button>
+                                </div>
+                            </div>
+
+                            <div className="card" style={{ padding: 0 }}>
+                                <div style={{ padding: "16px 24px", borderBottom: "1px solid #2D3748", background: "#131825", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h3 style={{ fontSize: 16, fontWeight: 700 }}>Student Competition History</h3>
+                                    <span style={{ fontSize: 12, color: '#64748B' }}>Showing {filteredCompAttempts.length} results</span>
+                                </div>
+                                {compLoading ? (
+                                    <div style={{ padding: 60, textAlign: "center", color: "#64748B" }}>Loading results...</div>
+                                ) : filteredCompAttempts.length === 0 ? (
+                                    <div style={{ padding: 60, textAlign: "center", color: "#64748B" }}>No competition attempts match your filters.</div>
+                                ) : (
+                                    <div style={{ overflowX: "auto" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                                            <thead style={{ background: "#0F1117" }}>
+                                                <tr>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Student / Challenge</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Mode</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Accuracy</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Score</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Date</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredCompAttempts.map(att => (
+                                                    <tr key={att.id} className="table-row">
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ fontWeight: 700, color: '#F8FAFC' }}>{att.username}</div>
+                                                            <div style={{ fontSize: 12, color: "#A0AEC0", marginTop: 4 }}>{att.competition_title}</div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <span style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 800, padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', color: '#94A3B8' }}>
+                                                                {att.mode}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                                <span style={{ color: '#10B981', fontWeight: 700 }}>{att.correct_answers}</span>
+                                                                <span style={{ color: '#64748B' }}>/</span>
+                                                                <span style={{ fontWeight: 700 }}>{att.total_questions}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ fontWeight: 900, fontSize: 16, color: att.score >= 80 ? '#10B981' : att.score >= 50 ? '#F59E0B' : '#EF4444' }}>
+                                                                {att.score} XP
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px", fontSize: 13, color: '#64748B' }}>
+                                                            {new Date(att.start_time).toLocaleDateString()}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {activeTab === "leaderboard" && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                             <div className="card" style={{ padding: "20px 24px", display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 300px" }}>
+                                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Select Course</label>
+                                    <select className="input-dark" value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)}>
+                                        <option value="all">Overall (All Managed Courses)</option>
+                                        {summary?.assigned_courses.map(c => (
+                                            <option key={c.course} value={c.course}>{c.course_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={{ flex: "0 0 auto", paddingTop: 18 }}>
+                                    <button className="btn-gold" onClick={fetchLeaderboard}>Refresh Leaderboard</button>
+                                </div>
+                            </div>
+
+                            <div className="card" style={{ padding: 0 }}>
+                                <div style={{ padding: "16px 24px", borderBottom: "1px solid #2D3748", background: "#131825" }}>
+                                    <h3 style={{ fontSize: 16, fontWeight: 700 }}>
+                                        {selectedCourseId === 'all' ? 'Global Ranking (All Courses)' : 'Student Rankings (Course XP)'}
+                                    </h3>
+                                </div>
+                                {leaderboardLoading ? (
+                                    <div style={{ padding: 60, textAlign: "center", color: "#64748B" }}>Loading leaderboard...</div>
+                                ) : leaderboard.length === 0 ? (
+                                    <div style={{ padding: 60, textAlign: "center", color: "#64748B" }}>No rankings available for this selection yet.</div>
+                                ) : (
+                                    <div style={{ overflowX: "auto" }}>
+                                        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                                            <thead style={{ background: "#0F1117" }}>
+                                                <tr>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B", width: 80 }}>Rank</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Student</th>
+                                                    <th style={{ padding: "14px 24px", color: "#64748B" }}>Course XP</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {leaderboard.map(entry => (
+                                                    <tr key={entry.student_id} className="table-row">
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ 
+                                                                width: 32, height: 32, borderRadius: '50%', 
+                                                                background: entry.rank === 1 ? '#F59E0B' : entry.rank === 2 ? '#94A3B8' : entry.rank === 3 ? '#B45309' : '#1E293B',
+                                                                color: entry.rank <= 3 ? '#0F1117' : '#94A3B8',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14
+                                                            }}>
+                                                                {entry.rank}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                                {entry.profile_picture ? (
+                                                                    <img src={entry.profile_picture} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                                                                ) : (
+                                                                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2D3748', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
+                                                                        {entry.username[0].toUpperCase()}
+                                                                    </div>
+                                                                )}
+                                                                <div style={{ fontWeight: 700, color: '#F8FAFC' }}>{entry.username}</div>
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: "18px 24px" }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                <span style={{ fontSize: 18, fontWeight: 900, color: '#F59E0B' }}>{entry.course_xp}</span>
+                                                                <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>XP</span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     )}
                 </main>
             </div>

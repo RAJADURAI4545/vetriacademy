@@ -15,10 +15,17 @@ export default function CompetitionPlay() {
     const [questions, setQuestions] = useState<any[]>([]);
     const [memorySets, setMemorySets] = useState<any[]>([]);
     const [timeLeft, setTimeLeft] = useState(0);
-    const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [answers, setAnswersState] = useState<Record<string, string>>({});
+    const answersRef = useRef<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const setAnswers = (updater: (prev: Record<string, string>) => Record<string, string>) => {
+        const next = updater(answersRef.current);
+        answersRef.current = next;
+        setAnswersState(next);
+    };
 
     // UX & Animation State
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -85,11 +92,11 @@ export default function CompetitionPlay() {
         setAnswers(prev => ({ ...prev, [qId]: selected }));
         setFeedback({ id: qId, isCorrect, selected, correct });
 
-        // Play feedback sound (optional)
         // Move to next question after delay
         setTimeout(() => {
+            const totalQ = mode === 'memory' ? (memorySets[0]?.questions?.length || 0) : questions.length;
             setFeedback(null);
-            if (currentIndex < questions.length - 1) {
+            if (currentIndex < totalQ - 1) {
                 setCurrentIndex(prev => prev + 1);
             } else {
                 handleSubmit();
@@ -101,10 +108,9 @@ export default function CompetitionPlay() {
         if (submitting) return;
         setSubmitting(true);
         try {
-            const res = await api.post(`/api/lms/competitions/submit/${id}/`, { answers });
+            const res = await api.post(`/api/lms/competitions/submit/${id}/`, { answers: answersRef.current });
             setFinalResult(res.data);
             setIsFinished(true);
-            // Trigger badge reveal after delay
             setTimeout(() => setShowBadge(true), 1500);
         } catch (err: any) {
             showToast("Submission failed.", "error");
@@ -121,11 +127,10 @@ export default function CompetitionPlay() {
     if (isFinished) return <CelebrationScreen result={finalResult} maxStreak={maxStreak} onExit={() => navigate("/competitions")} showBadge={showBadge} />;
 
     const currentQuestion = mode === 'memory' ? memorySets[0]?.questions[currentIndex] : questions[currentIndex];
-    const progress = ((currentIndex + 1) / (mode === 'memory' ? memorySets[0]?.questions.length : questions.length)) * 100;
+    const progress = ((currentIndex + 1) / (mode === 'memory' ? (memorySets[0]?.questions?.length || 1) : (questions.length || 1))) * 100;
 
     return (
         <div className="min-h-screen bg-[#0F1117] text-slate-100 pb-20 overflow-hidden">
-            {/* Header / Timer / Progress */}
             <div className="sticky top-0 z-40 bg-[#0F1117]/80 backdrop-blur-xl border-b border-slate-800">
                 <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -133,13 +138,12 @@ export default function CompetitionPlay() {
                             🏆
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Question {currentIndex + 1} of {questions.length || memorySets[0]?.questions.length}</p>
+                            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Question {currentIndex + 1} of {mode === 'memory' ? memorySets[0]?.questions?.length : questions.length}</p>
                             <h2 className="text-sm font-bold">{mode?.toUpperCase()} CHALLENGE</h2>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-6">
-                        {/* Streak Effect */}
                         {streak > 1 && (
                             <div className="flex items-center gap-2 animate-bounce">
                                 <span className="text-2xl">{streak >= 5 ? '⚡' : '🔥'}</span>
@@ -154,7 +158,6 @@ export default function CompetitionPlay() {
                         </div>
                     </div>
                 </div>
-                {/* Smooth Progress Bar */}
                 <div className="h-1.5 bg-slate-800/50 w-full">
                     <div className="h-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 transition-all duration-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]" style={{ width: `${progress}%` }}></div>
                 </div>
@@ -177,7 +180,6 @@ export default function CompetitionPlay() {
                             feedback={feedback}
                         />
                     )}
-                    {/* Other modes would follow similar refined patterns */}
                     {(mode === 'coding' || mode === 'english') && (
                         <div className="bg-[#1A1F2E] p-10 rounded-[2.5rem] border border-slate-800 shadow-2xl">
                             <h3 className="text-xl font-bold mb-8">This module is under visual upgrade...</h3>
@@ -187,7 +189,6 @@ export default function CompetitionPlay() {
                 </div>
             </div>
 
-            {/* Feedback Popups */}
             {feedback && (
                 <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom fade-in duration-300">
                     <div className={`px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 ${feedback.isCorrect ? 'bg-emerald-500 text-[#0F1117]' : 'bg-rose-500 text-white'}`}>
@@ -203,14 +204,13 @@ export default function CompetitionPlay() {
     );
 }
 
-/* --- REFINED SUB-COMPONENTS --- */
-
 function QuizCard({ question, onSelect, feedback }: any) {
+    if (!question) return null;
     return (
         <div className="bg-[#1A1F2E] p-10 rounded-[2.5rem] border border-slate-800 shadow-2xl relative overflow-hidden">
             <div className="mb-10">
                 <h3 className="text-2xl md:text-3xl font-black text-slate-100 leading-tight">
-                    {question.question_text}
+                    {question.question_text || question.question}
                 </h3>
             </div>
 
@@ -265,12 +265,10 @@ function CelebrationScreen({ result, maxStreak, onExit, showBadge }: any) {
     return (
         <div className="fixed inset-0 z-[100] bg-[#0F1117] flex items-center justify-center p-6 overflow-hidden">
             <Confetti />
-
             <div className="max-w-md w-full text-center animate-in zoom-in fade-in duration-700 relative z-10">
                 <div className="mb-8">
                     <span className="text-6xl md:text-8xl drop-shadow-2xl">🏆</span>
                 </div>
-
                 <h1 className="text-4xl md:text-6xl font-black text-white mb-2 leading-none uppercase italic tracking-tighter">Congratulations!</h1>
                 <p className="text-slate-400 font-bold mb-10 italic">"Every attempt makes you stronger."</p>
 
@@ -292,7 +290,7 @@ function CelebrationScreen({ result, maxStreak, onExit, showBadge }: any) {
                         <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400">
                             <span className="text-2xl">🌟</span>
                             <span className="font-black uppercase tracking-widest text-sm">
-                                {result?.correct_answers > result?.total_questions * 0.8 ? "Focused Mind" : "Quick Learner"}
+                                {result?.correct_answers >= result?.total_questions * 0.8 ? "Focused Mind" : "Quick Learner"}
                             </span>
                         </div>
                     </div>
@@ -378,28 +376,60 @@ function ReadyView({ mode, timeLeft, onStart, onBack }: any) {
 }
 
 function MemoryPlay({ memorySets, currentIndex, onSelect, feedback }: any) {
-    const [showingWords, setShowingWords] = useState(true);
+    const [phase, setPhase] = useState<'prepare' | 'memorize' | 'recall'>('prepare');
+    const [countdown, setCountdown] = useState(3);
     const [flashCountdown, setFlashCountdown] = useState(8);
 
     useEffect(() => {
-        if (showingWords && flashCountdown > 0) {
-            const timer = setTimeout(() => setFlashCountdown(flashCountdown - 1), 1000);
-            return () => clearTimeout(timer);
-        } else if (flashCountdown === 0) {
-            setShowingWords(false);
+        if (phase === 'prepare') {
+            if (countdown > 0) {
+                const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+                return () => clearTimeout(timer);
+            } else {
+                setPhase('memorize');
+            }
         }
-    }, [showingWords, flashCountdown]);
+    }, [phase, countdown]);
 
-    if (showingWords) {
+    useEffect(() => {
+        if (phase === 'memorize') {
+            if (flashCountdown > 0) {
+                const timer = setTimeout(() => setFlashCountdown(flashCountdown - 1), 1000);
+                return () => clearTimeout(timer);
+            } else {
+                setPhase('recall');
+            }
+        }
+    }, [phase, flashCountdown]);
+
+    if (phase === 'prepare') {
         return (
-            <div className="flex flex-col items-center justify-center py-10 scale-up">
-                <div className="text-center mb-12">
-                    <h2 className="text-4xl font-black mb-2 italic uppercase tracking-tighter text-amber-500">Memorize fast!</h2>
-                    <p className="text-slate-400 font-bold">They vanish in <span className="text-rose-500 animate-pulse">{flashCountdown}s</span></p>
+            <div className="flex flex-col items-center justify-center py-20 animate-in fade-in zoom-in duration-500">
+                <div className="relative w-32 h-32 flex items-center justify-center">
+                    <svg className="absolute inset-0 w-full h-full -rotate-90">
+                        <circle cx="64" cy="64" r="60" fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-800" />
+                        <circle cx="64" cy="64" r="60" fill="none" stroke="currentColor" strokeWidth="8" className="text-amber-500 transition-all duration-1000 ease-linear" strokeDasharray="377" strokeDashoffset={377 - (377 * countdown / 3)} />
+                    </svg>
+                    <span className="text-5xl font-black text-white">{countdown}</span>
                 </div>
-                <div className="flex flex-wrap justify-center gap-4 max-w-2xl">
+                <h2 className="mt-8 text-2xl font-black uppercase tracking-widest text-slate-400">Get Ready...</h2>
+            </div>
+        );
+    }
+
+    if (phase === 'memorize') {
+        return (
+            <div className="flex flex-col items-center justify-center py-10">
+                <div className="text-center mb-12 animate-in slide-in-from-top duration-700">
+                    <div className="inline-block px-4 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-black uppercase tracking-tighter mb-4 animate-pulse">
+                        Time is ticking!
+                    </div>
+                    <h2 className="text-5xl font-black mb-2 italic uppercase tracking-tighter bg-gradient-to-r from-amber-400 to-orange-600 bg-clip-text text-transparent">Memorize These!</h2>
+                    <p className="text-slate-400 font-bold">Vanishing in <span className="text-white text-xl">{flashCountdown}s</span></p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-6 max-w-2xl">
                     {memorySets[0]?.words_list.map((word: string, i: number) => (
-                        <div key={i} className="px-10 py-5 bg-white text-[#0F1117] text-2xl font-black rounded-3xl shadow-2xl animate-in zoom-in duration-300" style={{ animationDelay: `${i * 100}ms` }}>
+                        <div key={i} className="px-12 py-6 bg-white text-[#0F1117] text-3xl font-black rounded-[2rem] shadow-[0_20px_50px_rgba(255,255,255,0.1)] transform hover:scale-110 transition-transform cursor-default select-none animate-in zoom-in duration-500" style={{ animationDelay: `${i * 150}ms` }}>
                             {word}
                         </div>
                     ))}
@@ -409,12 +439,17 @@ function MemoryPlay({ memorySets, currentIndex, onSelect, feedback }: any) {
     }
 
     return (
-        <QuizCard
-            question={memorySets[0]?.questions[currentIndex]}
-            onSelect={onSelect}
-            feedback={feedback}
-            title="Recall Time"
-        />
+        <div className="animate-in slide-in-from-right duration-500">
+            <div className="text-center mb-8">
+                <h2 className="text-2xl font-black text-amber-500 uppercase tracking-widest italic">Recall Time</h2>
+                <p className="text-slate-500 text-sm font-bold">Select the correct answer based on what you saw.</p>
+            </div>
+            <QuizCard
+                question={memorySets[0]?.questions[currentIndex]}
+                onSelect={onSelect}
+                feedback={feedback}
+            />
+        </div>
     );
 }
 

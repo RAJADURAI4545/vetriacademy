@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import api from "../api";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import { useToast } from "../context/NotificationContext";
+import type { Route } from "./+types/admin-attendance";
 
 interface AttendanceLog {
     id: number;
     student: number;
     student_name: string;
+    course: number | null;
+    course_name: string | null;
     date: string;
     day: string;
     status: "present" | "absent";
@@ -21,11 +24,28 @@ export function meta() {
     return [{ title: "Attendance Log | Admin Panel" }];
 }
 
+export async function clientLoader() {
+    try {
+        const [coursesRes, studentsRes] = await Promise.all([
+            api.get("/api/lms/courses/"),
+            api.get("/api/accounts/users/"),
+        ]);
+        return {
+            initialCourses: coursesRes.data as Course[],
+            initialStudents: studentsRes.data as { id: number; username: string; email: string; }[]
+        };
+    } catch (err) {
+        console.error("Admin loader error:", err);
+        return { initialCourses: [], initialStudents: [] };
+    }
+}
+
 export default function AdminAttendanceLogs() {
+    const loaderData = useLoaderData<typeof clientLoader>();
     const { showToast } = useToast();
     const navigate = useNavigate();
     const [logs, setLogs] = useState<AttendanceLog[]>([]);
-    const [courses, setCourses] = useState<Course[]>([]);
+    const [courses, setCourses] = useState<Course[]>(loaderData.initialCourses);
     const [loading, setLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<number | null>(null);
 
@@ -39,7 +59,7 @@ export default function AdminAttendanceLogs() {
     const [markStudentId, setMarkStudentId] = useState<string>("");
     const [markDate, setMarkDate] = useState<string>(new Date().toISOString().split("T")[0]);
     const [markStatus, setMarkStatus] = useState<"present" | "absent">("present");
-    const [allStudents, setAllStudents] = useState<{ id: number; username: string; email: string; }[]>([]);
+    const [allStudents, setAllStudents] = useState<{ id: number; username: string; email: string; }[]>(loaderData.initialStudents);
     const [markSaving, setMarkSaving] = useState(false);
     // Modal-level filters
     const [modalCourseFilter, setModalCourseFilter] = useState<string>("all");
@@ -51,15 +71,8 @@ export default function AdminAttendanceLogs() {
             if (selectedCourseId !== "all") url += `course_id=${selectedCourseId}&`;
             if (selectedDate) url += `date=${selectedDate}&`;
 
-            const [logsRes, coursesRes, studentsRes] = await Promise.all([
-                api.get(url),
-                api.get("/api/lms/courses/"),
-                api.get("/api/accounts/users/"), // Need endpoint for all users
-            ]);
-
+            const logsRes = await api.get(url);
             setLogs(logsRes.data);
-            setCourses(coursesRes.data);
-            setAllStudents(studentsRes.data);
         } catch (err: any) {
             console.error(err);
             if (err.response?.status === 401) {
@@ -83,7 +96,12 @@ export default function AdminAttendanceLogs() {
         try {
             await api.post(
                 "/api/lms/attendance/mark/",
-                { student_id: log.student, date: log.date, status: newStatus }
+                { 
+                    student_id: log.student, 
+                    course_id: log.course,
+                    date: log.date, 
+                    status: newStatus 
+                }
             );
             setLogs(prev =>
                 prev.map(l => (l.id === log.id ? { ...l, status: newStatus } : l))
@@ -102,7 +120,12 @@ export default function AdminAttendanceLogs() {
         try {
             await api.post(
                 "/api/lms/attendance/mark/",
-                { student_id: Number(markStudentId), date: markDate, status: markStatus }
+                { 
+                    student_id: Number(markStudentId), 
+                    course_id: Number(modalCourseFilter === "all" ? 0 : modalCourseFilter),
+                    date: markDate, 
+                    status: markStatus 
+                }
             );
             showToast("Attendance record saved.", "success");
             setShowMarkPanel(false);
@@ -160,49 +183,67 @@ export default function AdminAttendanceLogs() {
                 .stat-card { background: #1A1F2E; border: 1px solid #2D3748; border-radius: 12px; padding: 20px 24px; }
                 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; animation: fadeIn 0.2s ease; }
                 .modal { background: #1A1F2E; border: 1px solid #2D3748; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; }
+                
+                @media (max-width: 768px) {
+                    .topbar { flex-direction: column !important; align-items: stretch !important; padding: 20px !important; }
+                    .topbar-actions { flex-direction: column !important; }
+                    .stats-grid { grid-template-columns: 1fr 1fr !important; }
+                    .filters-bar { flex-direction: column !important; align-items: stretch !important; }
+                    .filters-bar > div, .filters-bar > select { flex: none !important; width: 100% !important; }
+                    .table-container { overflow-x: auto !important; }
+                    .table-header, .table-row { grid-template-columns: 120px 200px 100px 140px !important; width: 560px !important; }
+                    .main-container { padding: 20px !important; }
+                }
+                @media (max-width: 480px) {
+                    .stats-grid { grid-template-columns: 1fr !important; }
+                }
             `}</style>
 
             {/* ── TOPBAR ── */}
-            <div style={{ background: "#111827", borderBottom: "1px solid #2D3748", padding: "16px 32px", display: "flex", alignItems: "center", gap: 16 }}>
-                <button
-                    onClick={() => navigate("/dashboard")}
-                    style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #2D3748", background: "transparent", color: "#94A3B8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                >
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                </button>
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Admin Panel</div>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: "#F1F5F9" }}>Attendance Log</div>
+            <div className="topbar" style={{ background: "#111827", borderBottom: "1px solid #2D3748", padding: "16px 32px", display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
+                    <button
+                        onClick={() => navigate("/dashboard")}
+                        style={{ width: 36, height: 36, borderRadius: 8, border: "1px solid #2D3748", background: "transparent", color: "#94A3B8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                    >
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    </button>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2 }}>Admin Panel</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#F1F5F9" }}>Attendance Log</div>
+                    </div>
                 </div>
-                <button
-                    onClick={() => setShowMarkPanel(true)}
-                    className="btn-gold"
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", fontSize: 13 }}
-                >
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
-                    Mark Attendance
-                </button>
-                <button
-                    onClick={() => navigate("/admin-dashboard")}
-                    className="btn-ghost"
-                    style={{ padding: "10px 18px", fontSize: 13 }}
-                >
-                    Student Roster
-                </button>
-                <button
-                    onClick={() => { localStorage.clear(); navigate("/login"); }}
-                    className="btn-ghost"
-                    style={{ padding: "10px 18px", fontSize: 13, border: "1px solid #EF444440", color: "#F87171" }}
-                >
-                    Logout 👋
-                </button>
+                <div className="topbar-actions" style={{ display: "flex", gap: 12 }}>
+                    <button
+                        onClick={() => setShowMarkPanel(true)}
+                        className="btn-gold"
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", fontSize: 13 }}
+                    >
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
+                        Mark Attendance
+                    </button>
+                    <button
+                        onClick={() => navigate("/admin-dashboard")}
+                        className="btn-ghost"
+                        style={{ padding: "10px 18px", fontSize: 13 }}
+                    >
+                        Student Roster
+                    </button>
+                    <button
+                        onClick={() => { localStorage.clear(); navigate("/login"); }}
+                        className="btn-ghost"
+                        style={{ padding: "10px 18px", fontSize: 13, border: "1px solid #EF444440", color: "#F87171" }}
+                    >
+                        Logout 👋
+                    </button>
+                </div>
             </div>
 
-            <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 32px" }}>
+            <div className="main-container" style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 32px" }}>
 
                 {/* ── STAT CARDS ── */}
                 {!loading && (
-                    <div className="fade-in" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 28 }}>
+                    <div className="fade-in stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginBottom: 28 }}>
                         {[
                             { label: "Total Records", value: filteredLogs.length, color: "#3B82F6", icon: "📋" },
                             { label: "Present", value: presentCount, color: "#10B981", icon: "✅" },
@@ -221,7 +262,7 @@ export default function AdminAttendanceLogs() {
                 )}
 
                 {/* ── FILTERS ── */}
-                <div className="card fade-in" style={{ padding: "20px 24px", marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                <div className="card fade-in filters-bar" style={{ padding: "20px 24px", marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                     <div style={{ position: "relative", flex: "1 1 220px" }}>
                         <svg style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#64748B" }} width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                         <input
@@ -283,10 +324,10 @@ export default function AdminAttendanceLogs() {
                         <p style={{ color: "#64748B", fontWeight: 600 }}>Loading records…</p>
                     </div>
                 ) : (
-                    <div className="card fade-in" style={{ overflow: "hidden" }}>
+                    <div className="card fade-in table-container" style={{ overflow: "hidden" }}>
                         {/* Table Header */}
-                        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 120px 140px", gap: 8, padding: "12px 24px", borderBottom: "1px solid #2D3748", background: "#131825" }}>
-                            {["Date & Day", "Student", "Status", "Quick Action"].map(h => (
+                        <div className="table-header" style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr 120px 140px", gap: 8, padding: "12px 24px", borderBottom: "1px solid #2D3748", background: "#131825" }}>
+                            {["Date & Day", "Student", "Course", "Status", "Quick Action"].map(h => (
                                 <span key={h} style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</span>
                             ))}
                         </div>
@@ -302,10 +343,10 @@ export default function AdminAttendanceLogs() {
                             filteredLogs.map((log, idx) => (
                                 <div
                                     key={log.id}
-                                    className="tr-hover"
+                                    className="tr-hover table-row"
                                     style={{
                                         display: "grid",
-                                        gridTemplateColumns: "160px 1fr 120px 140px",
+                                        gridTemplateColumns: "160px 1fr 1fr 120px 140px",
                                         gap: 8,
                                         padding: "16px 24px",
                                         borderBottom: idx < filteredLogs.length - 1 ? "1px solid #1E2535" : "none",
@@ -322,6 +363,11 @@ export default function AdminAttendanceLogs() {
                                     {/* Student */}
                                     <div>
                                         <div style={{ fontSize: 14, fontWeight: 700, color: "#F1F5F9" }}>{log.student_name}</div>
+                                    </div>
+
+                                    {/* Course */}
+                                    <div>
+                                        <div style={{ fontSize: 13, color: "#F59E0B", fontWeight: 600 }}>{log.course_name || "General"}</div>
                                     </div>
 
                                     {/* Status Badge */}
@@ -383,6 +429,25 @@ export default function AdminAttendanceLogs() {
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+                                {/* ─ STEP 0: Course Picker ─ */}
+                                <div>
+                                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: modalCourseFilter !== "all" ? "#10B981" : "#64748B", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+                                        <span style={{ width: 18, height: 18, borderRadius: "50%", background: modalCourseFilter !== "all" ? "#10B981" : "#2D3748", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 800 }}>0</span>
+                                        Select Course
+                                    </label>
+                                    <select 
+                                        className="select-dark" 
+                                        value={modalCourseFilter} 
+                                        onChange={e => setModalCourseFilter(e.target.value)}
+                                        style={{ width: "100%" }}
+                                    >
+                                        <option value="all">General / Academy</option>
+                                        {courses.map(c => (
+                                            <option key={c.id} value={c.id}>{c.course_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
                                 {/* ─ STEP 1: Student Picker ─ */}
                                 <div>
@@ -517,9 +582,9 @@ export default function AdminAttendanceLogs() {
                                     </button>
                                     <button
                                         onClick={handleMarkNew}
-                                        disabled={markSaving || !markStudentId}
+                                        disabled={markSaving || !markStudentId || modalCourseFilter === "all"}
                                         className="btn-gold"
-                                        style={{ flex: 2, padding: "12px 0", fontSize: 14, opacity: (markSaving || !markStudentId) ? 0.5 : 1 }}
+                                        style={{ flex: 2, padding: "12px 0", fontSize: 14, opacity: (markSaving || !markStudentId || modalCourseFilter === "all") ? 0.5 : 1 }}
                                     >
                                         {markSaving ? "Saving…" : "Save Record"}
                                     </button>

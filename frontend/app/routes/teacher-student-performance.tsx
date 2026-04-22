@@ -117,7 +117,27 @@ export default function TeacherStudentPerformance() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                             <span className="stat-pill">{performance.course_name}</span>
                         </div>
-                        <h1 style={{ fontSize: 36, fontWeight: 800, color: "#F1F5F9", letterSpacing: '-1px' }}>{performance.student_details.username}</h1>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h1 style={{ fontSize: 36, fontWeight: 800, color: "#F1F5F9", letterSpacing: '-1px' }}>{performance.student_details.username}</h1>
+                            <button 
+                                className="btn-gold" 
+                                style={{ padding: '8px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}
+                                onClick={async () => {
+                                    try {
+                                        const response = await api.get(`/api/lms/attendance/export/${enrollment_id}/`, { responseType: 'blob' });
+                                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.setAttribute('download', `Attendance_${performance.student_details.username}_${performance.course_name}.csv`);
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        link.remove();
+                                    } catch (err) { showToast("Failed to download report", "error"); }
+                                }}
+                            >
+                                📥 Download Report
+                            </button>
+                        </div>
                         <p style={{ color: "#94A3B8", fontSize: 18, marginTop: 4 }}>{performance.student_details.email}</p>
                     </div>
                 </div>

@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-7927^yj7$uvo#&gfdov3jf=s@^6y_ne47_3pq3ffx87+p*g4!g')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 _allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
 ALLOWED_HOSTS = [
@@ -37,13 +37,16 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'whitenoise.runserver_nostatic', # For serving static files in production
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
     'accounts',
-    'lms',
+    'lms.apps.LmsConfig',
 ]
+
+# Only disable Django's static serving in production (let WhiteNoise handle it)
+if not DEBUG:
+    INSTALLED_APPS.insert(5, 'whitenoise.runserver_nostatic')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -158,16 +161,20 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
+        
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Whitenoise storage for compression and caching
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# Only use WhiteNoise manifest storage in production
+if not DEBUG:
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# WhiteNoise: aggressive caching for hashed static files (1 year)
+WHITENOISE_MAX_AGE = 31536000
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -176,3 +183,45 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# =============================================================================
+# PERFORMANCE OPTIMIZATIONS (for 100+ concurrent users)
+# =============================================================================
+
+# --- Caching ---
+# LocMemCache: per-process in-memory cache. No Redis needed for ≤100 users.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'vetri-academy-cache',
+        'TIMEOUT': 300,  # 5 minutes default TTL
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        },
+    }
+}
+
+# --- Sessions ---
+# Use cache-backed sessions instead of DB to avoid a query per request.
+# Sessions are only used for the admin panel (API uses stateless JWT).
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'default'
+
+# --- Logging (debug query counts in development) ---
+if DEBUG:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+            },
+        },
+        'loggers': {
+            'django.db.backends': {
+                'level': 'WARNING',  # Set to 'DEBUG' to see all SQL queries
+                'handlers': ['console'],
+            },
+        },
+    }
