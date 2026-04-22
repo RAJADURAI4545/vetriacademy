@@ -11,7 +11,7 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     useEffect(() => {
-        const timer = setTimeout(onClose, 5000);
+        const timer = setTimeout(onClose, 7000);
         return () => clearTimeout(timer);
     }, [onClose]);
 
@@ -73,11 +73,15 @@ export const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
                 }
                 .toast-close:hover { color: #F1F5F9; }
                 .fade-in-toast {
-                    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1), fadeOut 0.5s 6.5s forwards;
                 }
                 @keyframes slideIn {
                     from { transform: translateY(-20px) scale(0.9); opacity: 0; }
                     to { transform: translateY(0) scale(1); opacity: 1; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; transform: scale(1); }
+                    to { opacity: 0; transform: scale(0.95); }
                 }
             `}</style>
         </div>
