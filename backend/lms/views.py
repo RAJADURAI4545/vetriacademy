@@ -590,7 +590,7 @@ class TeacherStudentListView(generics.ListAPIView):
         course_id = self.request.query_params.get('course_id')
         
         # Security: ensure teacher is assigned to this course
-        if course_id:
+        if course_id and course_id != 'all':
             if not TeacherCourseAssignment.objects.filter(teacher=teacher, course_id=course_id).exists():
                 return Enrollment.objects.none()
             return Enrollment.objects.filter(course_id=course_id).select_related('student', 'course', 'attendance', 'grade').prefetch_related('student__competitionparticipant_set', 'student__dailyattendancelog_set')
